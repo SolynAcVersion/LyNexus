@@ -204,4 +204,4 @@ This project is licensed under the Mozilla Public License 2.0 - see the [LICENSE
 
 - **Users**: For trusting us with your AI development needs
 
-<div align="center"> <p> <strong>Built with ❤️ by the AI community, for the AI community</strong> </p> <p> <a href="https://forum.lynexus.ai">Forum</a> • <a href="https://github.com/SolynAcVersion/LyNexus/issues">Issues</a> • <a href="https://github.com/SolynAcVersion/LyNexus/discussions">Discussions</a> </p> </div><p align="center"> <sub>Star ⭐ this repository if you find it useful!</sub> </p>
+<div align="center"> <p> <strong>Built with ❤️ by the AI community, for the AI community</strong> </p> <p> <a href="https://forum.lynexus.ai">Forum</a> • <a href="https://solynacversion.github.io/LyNexus">Documentation</a> • <a href="https://github.com/SolynAcVersion/LyNexus/issues">Issues</a> • <a href="https://github.com/SolynAcVersion/LyNexus/discussions">Discussions</a> </p> </div><p align="center"> <sub>Star ⭐ this repository if you find it useful!</sub> </p>
