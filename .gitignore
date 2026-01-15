@@ -8,6 +8,8 @@ wheels/
 chathistory/
 *.spec
 
+/conversations/
+
 # Virtual environments
 .venv
 

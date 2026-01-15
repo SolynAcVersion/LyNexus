@@ -41,6 +41,7 @@ class I18n:
                 "select_mcp_files": "Select MCP Files",
                 "start_lynexus": "Start Lynexus",
                 "load_config_file": "Load Config",
+                "import_config": "Load Config",
                 
                 # Messages
                 "type_message": "Type your message here...",
@@ -49,8 +50,6 @@ class I18n:
                 
                 # Chat names
                 "general_chat": "Chat 1",
-                "technical_support": "Technical Support",
-                "creative_writing": "Creative Writing",
             },
             "zh": {
                 # General
@@ -76,6 +75,7 @@ class I18n:
                 "select_mcp_files": "选择MCP文件",
                 "start_lynexus": "启动 Lynexus",
                 "load_config_file": "加载配置",
+                "import_config": "加载配置文件",
                 
                 # Messages
                 "type_message": "在此输入消息...",

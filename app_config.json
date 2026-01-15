@@ -1,0 +1,10 @@
+{
+  "chat_list": [
+    "general_chat"
+  ],
+  "app_settings": {
+    "window_width": 1400,
+    "window_height": 900,
+    "last_active_chat": "general_chat"
+  }
+}

@@ -15,11 +15,61 @@ class ConfigManager:
         self.ignore_file = ".confignore"
         self.conversations_dir = "conversations"
         self.history_dir = "chathistory"
+        self.app_config_file = "app_config.json"
         
         # Create directories if they don't exist
         os.makedirs(self.configs_dir, exist_ok=True)
         os.makedirs(self.conversations_dir, exist_ok=True)
         os.makedirs(self.history_dir, exist_ok=True)
+        
+        # Initialize app config if it doesn't exist
+        self._init_app_config()
+    
+    def _init_app_config(self):
+        """Initialize application configuration file if it doesn't exist."""
+        config_path = self.app_config_file
+        if not os.path.exists(config_path):
+            default_config = {
+                "chat_list": ["general_chat"],
+                "app_settings": {
+                    "window_width": 1400,
+                    "window_height": 900,
+                    "last_active_chat": "general_chat"
+                }
+            }
+            try:
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(default_config, f, indent=2, ensure_ascii=False)
+                print(f"Created default app config at {config_path}")
+            except Exception as e:
+                print(f"Error creating app config: {e}")
+    
+    def load_config_file(self):
+        """Load main application configuration file."""
+        config_path = self.app_config_file
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading config file: {e}")
+        
+        # Return default config if file doesn't exist or error
+        return {
+            "chat_list": [],
+            "app_settings": {}
+        }
+    
+    def save_config_file(self, config_data):
+        """Save main application configuration file."""
+        config_path = self.app_config_file
+        try:
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, indent=2, ensure_ascii=False)
+            return True
+        except Exception as e:
+            print(f"Error saving config file: {e}")
+            return False
     
     def get_conversation_config_path(self, conversation_name):
         """Get config file path for a conversation (sanitized name)."""
@@ -147,3 +197,45 @@ class ConfigManager:
                 except Exception as e:
                     print(f"Error loading chat history: {e}")
         return chat_records
+    
+    def save_chat_list(self, chat_list):
+        """保存聊天列表"""
+        try:
+            data = self.load_config_file()
+            data['chat_list'] = chat_list
+            self.save_config_file(data)
+            return True
+        except Exception as e:
+            print(f"Error saving chat list: {e}")
+            return False
+    
+    def load_chat_list(self):
+        """加载聊天列表"""
+        try:
+            data = self.load_config_file()
+            return data.get('chat_list', [])
+        except Exception as e:
+            print(f"Error loading chat list: {e}")
+            return None
+    
+    def save_last_active_chat(self, chat_name):
+        """保存最后活动的聊天"""
+        try:
+            data = self.load_config_file()
+            if 'app_settings' not in data:
+                data['app_settings'] = {}
+            data['app_settings']['last_active_chat'] = chat_name
+            self.save_config_file(data)
+            return True
+        except Exception as e:
+            print(f"Error saving last active chat: {e}")
+            return False
+    
+    def load_last_active_chat(self):
+        """加载最后活动的聊天"""
+        try:
+            data = self.load_config_file()
+            return data.get('app_settings', {}).get('last_active_chat')
+        except Exception as e:
+            print(f"Error loading last active chat: {e}")
+            return None

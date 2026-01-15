@@ -42,6 +42,7 @@ class AI:
                 command_start="YLDEXECUTE:",
                 command_separator="￥|",
                 
+                
                 # Command execution
                 max_iterations=15):
         """Initialize AI agent with enhanced features"""
@@ -49,6 +50,7 @@ class AI:
         # Tool configuration - store relative paths
         self.mcp_paths = mcp_paths or []
         self.funcs = {}
+        
         
         # API configuration
         self.api_key = api_key
@@ -83,6 +85,9 @@ class AI:
             "tool_args": None,
             "start_time": None
         }
+        
+        # Initialize stop flag
+        self._stop_flag = False
         
         # Initialize AI client first
         self.init_ai_client()
@@ -158,6 +163,25 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
 """
         return default_prompt
 
+
+    def set_stop_flag(self, value: bool):
+        """Set stop flag for interrupting execution."""
+        self._stop_flag = value
+        if value:
+            # 如果设置为True，更新执行状态
+            self.execution_status = {
+                "status": "idle",
+                "tool_name": None,
+                "tool_args": None,
+                "start_time": None
+            }
+            print(f"[Info] Stop flag set to True, execution interrupted")
+        
+    def get_stop_flag(self):
+        """Get current stop flag value."""
+        return self._stop_flag
+
+    
     def load_mcp_mod(self, mcp_path):
         """Load one MCP file (*.json or *.py)"""
         try:
@@ -522,7 +546,11 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
         print(f"[Info] Conversation history loaded. Total messages: {len(self.conv_his)}")
     
     def exec_func(self, func_name, *args):
-        """Execute functions called by AI agents with status tracking"""
+        """Execute functions called by AI agents with status tracking and stop flag support"""
+        # 检查停止标志
+        if self.get_stop_flag():
+            return "Execution interrupted by user"
+        
         if func_name not in self.funcs:
             return f"Error: Function '{func_name}' does not exist"
         
@@ -537,6 +565,17 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
             
             print(f"[Debug] Executing function: {func_name} with args: {args}")
             
+            # 在执行前再次检查停止标志
+            if self.get_stop_flag():
+                # Reset execution status
+                self.execution_status = {
+                    "status": "stopped",
+                    "tool_name": None,
+                    "tool_args": None,
+                    "start_time": None
+                }
+                return "Execution interrupted by user before execution"
+            
             if func_name.startswith('mcp_'):
                 kwargs = {}
                 for arg in args:
@@ -547,9 +586,31 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
                         kwargs['value'] = arg.strip()
                 
                 print(f"[Debug] Calling MCP function with kwargs: {kwargs}")
+                
+                # 在执行前再次检查停止标志
+                if self.get_stop_flag():
+                    self.execution_status = {
+                        "status": "stopped",
+                        "tool_name": None,
+                        "tool_args": None,
+                        "start_time": None
+                    }
+                    return "Execution interrupted by user before MCP execution"
+                
                 res = self.funcs[func_name](**kwargs)
             else:
                 print(f"[Debug] Calling regular function with args: {args}")
+                
+                # 在执行前再次检查停止标志
+                if self.get_stop_flag():
+                    self.execution_status = {
+                        "status": "stopped",
+                        "tool_name": None,
+                        "tool_args": None,
+                        "start_time": None
+                    }
+                    return "Execution interrupted by user before function execution"
+                
                 res = self.funcs[func_name](*args)
             
             print(f"[Debug] Function execution result: {res[:100]}..." if len(str(res)) > 100 else f"[Debug] Function execution result: {res}")
@@ -576,14 +637,29 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
             
             return f"Execution failed: {e}"
     
+        
+
     def process_user_inp(self, user_inp, max_iter=None):
-        """Process user input with execution status tracking"""
+        """处理用户输入"""
         if not user_inp:
             return "", False
 
         max_iter = max_iter or self.max_iterations
         
-        # Update execution status to processing
+        # 检查停止标志
+        if self.get_stop_flag():
+            # 重置停止标志
+            self.set_stop_flag(False)
+            # 重置执行状态
+            self.execution_status = {
+                "status": "idle",
+                "tool_name": None,
+                "tool_args": None,
+                "start_time": None
+            }
+            return "**Execution stopped**\nProcessing was interrupted by user.", True
+        
+        # 重置执行状态为处理中
         self.execution_status = {
             "status": "processing",
             "tool_name": None,
@@ -591,12 +667,29 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
             "start_time": datetime.now().isoformat()
         }
         
-        # Add user input to conversation history
+        # 添加用户输入到对话历史
         self.conv_his.append({"role": "user", "content": user_inp})
         
         for step in range(max_iter):
+            # 检查停止标志
+            if self.get_stop_flag():
+                print(f"[Info] Stop flag detected, stopping execution at step {step+1}")
+                
+                # 重置执行状态
+                self.execution_status = {
+                    "status": "idle",
+                    "tool_name": None,
+                    "tool_args": None,
+                    "start_time": None
+                }
+                
+                # 重置停止标志
+                self.set_stop_flag(False)
+                
+                return "**Execution stopped**\nProcessing was interrupted by user.", True
+            
             try:
-                # Prepare API call parameters
+                # 准备API参数
                 api_params = {
                     "model": self.model,
                     "temperature": self.temperature,
@@ -604,7 +697,7 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
                     "stream": self.stream
                 }
                 
-                # Add optional parameters if not None
+                # 添加可选参数
                 optional_params = {
                     "max_tokens": self.max_tokens,
                     "top_p": self.top_p,
@@ -618,36 +711,76 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
                         api_params[param] = value
                 
                 print(f"[Debug] Sending request to API with {len(self.conv_his)} messages")
+                
+                # 执行API调用
                 response = self.client.chat.completions.create(**api_params)
                 get_reply = response.choices[0].message.content
                 print(f"[Debug] Received reply: {get_reply[:100]}..." if len(get_reply) > 100 else f"[Debug] Received reply: {get_reply}")
                 
-                # Check if AI wants to execute commands
+                # 检查停止标志
+                if self.get_stop_flag():
+                    self.execution_status = {
+                        "status": "idle",
+                        "tool_name": None,
+                        "tool_args": None,
+                        "start_time": None
+                    }
+                    self.set_stop_flag(False)
+                    return "**Execution stopped**\nProcessing was interrupted by user.", True
+                
+                # 检查AI是否要执行命令
                 if get_reply.startswith(self.command_start):
                     print(f"\n[Step {step + 1}][AI requested execution] {get_reply}")
                     
-                    # Parse command
+                    # 解析命令
                     tokens = get_reply.replace(self.command_start, "").strip().split(self.command_separator)
                     tokens = [t.strip() for t in tokens]
-                    print(f"[Debug] Parsed tokens: {tokens}")
                     
                     if len(tokens) < 1:
                         res = "Error! Your command format is incorrect"
                     else:
                         func_name = tokens[0]
                         args = tokens[1:] if len(tokens) > 1 else []
+                        
+                        # 检查停止标志
+                        if self.get_stop_flag():
+                            self.execution_status = {
+                                "status": "idle",
+                                "tool_name": None,
+                                "tool_args": None,
+                                "start_time": None
+                            }
+                            self.set_stop_flag(False)
+                            return "**Execution stopped**\nProcessing was interrupted by user.", True
+                        
+                        # 执行函数
                         res = self.exec_func(func_name, *args)
                     
                     print(f"[Info] AI execution result: {res}")
                     
+                    # 检查停止标志
+                    if self.get_stop_flag():
+                        self.execution_status = {
+                            "status": "idle",
+                            "tool_name": None,
+                            "tool_args": None,
+                            "start_time": None
+                        }
+                        self.set_stop_flag(False)
+                        return "**Execution stopped**\nProcessing was interrupted by user.", True
+                    
+                    # 添加回复和结果到对话历史
                     self.conv_his.append({"role": "assistant", "content": get_reply})
-                    self.conv_his.append({"role": "user", "content": f"Execution result: {res}\nPlease decide the next operation based on this result. If the task is complete, please summarize and tell me the result."})
+                    self.conv_his.append({
+                        "role": "user", 
+                        "content": f"Execution result: {res}\nPlease decide the next operation based on this result. If the task is complete, please summarize and tell me the result."
+                    })
                     
                 else:
-                    # No execution needed
+                    # 不需要执行命令
                     self.conv_his.append({"role": "assistant", "content": get_reply})
                     
-                    # Reset execution status
+                    # 重置执行状态
                     self.execution_status = {
                         "status": "idle",
                         "tool_name": None,
@@ -660,7 +793,18 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
             except Exception as e:
                 print(f"[Error] Error processing user input: {e}")
                 
-                # Reset execution status
+                # 检查是否是因为停止导致的异常
+                if self.get_stop_flag():
+                    self.set_stop_flag(False)
+                    self.execution_status = {
+                        "status": "idle",
+                        "tool_name": None,
+                        "tool_args": None,
+                        "start_time": None
+                    }
+                    return "**Execution stopped**\nProcessing was interrupted by user.", True
+                
+                # 重置执行状态
                 self.execution_status = {
                     "status": "idle",
                     "tool_name": None,
@@ -670,7 +814,7 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
                 
                 return f"Error occurred during processing: {e}", True
         
-        # Reset execution status
+        # 达到最大迭代次数
         self.execution_status = {
             "status": "idle",
             "tool_name": None,
@@ -679,7 +823,9 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
         }
         
         return f"Reached maximum execution steps ({max_iter}), task may not be fully completed", False
-    
+
+
+
     def get_available_tools(self):
         """Get available tools list"""
         tools = []
