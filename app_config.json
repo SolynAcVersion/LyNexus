@@ -1,6 +1,7 @@
 {
   "chat_list": [
-    "general_chat"
+    "general_chat",
+    "啊"
   ],
   "app_settings": {
     "window_width": 1400,

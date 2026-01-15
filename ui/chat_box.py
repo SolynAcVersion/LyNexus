@@ -92,7 +92,7 @@ class ModernMessageBubble(QWidget):
         # 消息内容
         self.message_label = QLabel(self.message)
         self.message_label.setWordWrap(True)
-        self.message_label.setTextFormat(Qt.MarkdownText)
+        self.message_label.setTextFormat(Qt.PlainText)
         self.message_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.message_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.message_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)

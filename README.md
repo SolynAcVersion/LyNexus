@@ -11,6 +11,10 @@
   <strong>Empower your AI development with community-driven intelligence</strong>
 </div>
 
+<div align="center">
+  <a href = "https://github.com/SolynAcVersion/LyNexus/blob/main/README_zh_cn.md">简体中文</a>
+</div>
+
 ## 🌟 What is Lynexus?
 
 Lynexus is a **community-driven AI agent platform** that empowers developers to create, customize, and share intelligent agents with configurable prompts, tools, and behavior parameters. Built with flexibility and collaboration in mind, it transforms AI development into a shared experience.

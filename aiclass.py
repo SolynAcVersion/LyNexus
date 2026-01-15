@@ -31,7 +31,7 @@ class AI:
                 
                 # Model parameters
                 temperature=1.0,
-                max_tokens=None,
+                max_tokens=2048,
                 top_p=1.0,
                 stop=None,
                 stream=False,

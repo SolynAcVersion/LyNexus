@@ -108,9 +108,8 @@ class SettingsDialog(QWidget):
         
         # Max tokens control - fix for None values
         self.max_tokens_spin = QSpinBox()
-        self.max_tokens_spin.setRange(0, 100000)
-        self.max_tokens_spin.setSpecialValueText("No limit (0)")
-        self.max_tokens_spin.setValue(0)
+        self.max_tokens_spin.setRange(0, 8192)
+        self.max_tokens_spin.setValue(2048)
         self.max_tokens_spin.setToolTip("Maximum number of tokens to generate (0 for no limit)")
         
         # Top-p control
