@@ -1,0 +1,15 @@
+# Core Dependencies
+PySide6>=6.6.0
+requests>=2.31.0
+
+# AI/ML Dependencies
+openai>=1.0.0
+anthropic>=0.18.0
+
+# Markdown and LaTeX Rendering
+markdown>=3.5.0
+pymdown-extensions>=10.0
+markdown-katex>=2023.1
+
+# Utilities
+python-dotenv>=1.0.0

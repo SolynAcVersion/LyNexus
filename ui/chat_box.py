@@ -26,10 +26,7 @@ from PySide6.QtWidgets import (
     QInputDialog, QMessageBox, QStatusBar, QFileDialog,
     QSizePolicy, QSpacerItem, QApplication, QProgressBar
 )
-from PySide6.QtGui import (
-    QFont, QFontMetrics, QIcon, QPixmap, QPainter, QColor,
-    QBrush, QPalette, QAction, QTextCursor
-)
+from PySide6.QtGui import QIcon
 from PySide6.QtCore import (
     Qt, QTimer, QThread, Signal, QSize, QPoint, QRect, QEvent,
     QPropertyAnimation, QEasingCurve, QParallelAnimationGroup,
@@ -40,6 +37,7 @@ from PySide6.QtCore import (
 from config.i18n import i18n
 from utils.config_manager import ConfigManager
 from utils.ai_history_manager import AIHistoryManager
+from utils.markdown_renderer import MarkdownRenderer, RenderMode, get_renderer
 from ui.init_dialog import InitDialog
 from ui.settings_dialog import SettingsDialog
 from aiclass import AI
@@ -68,8 +66,10 @@ class ConversationConfig:
     # Customizable prompts for command execution flow
     command_execution_prompt: str = (
         "Execution result: {result}\n\n"
-        "CRITICAL INSTRUCTION: If the task is COMPLETE, provide a FINAL SUMMARY in Chinese and then STOP - "
-        "do NOT execute any more commands. Only execute another command if this result shows the task is incomplete "
+        "CRITICAL INSTRUCTION: If the task is COMPLETE, provide a FINAL SUMMARY in Chinese of ONLY this specific result - "
+        "do NOT summarize previous operations or entire conversation history. "
+        "Focus ONLY on what was accomplished in THIS execution. "
+        "Then STOP - do NOT execute any more commands. Only execute another command if this result shows the task is incomplete "
         "and you have a clear next step."
     )
 
@@ -79,9 +79,10 @@ class ConversationConfig:
     )
 
     final_summary_prompt: str = (
-        "Based on all the execution results, please provide a FINAL SUMMARY in Chinese of what was found or accomplished. "
+        "Based on the CURRENT execution result ONLY, please provide a FINAL SUMMARY in Chinese of what was found or accomplished in THIS operation. "
         "This is the FINAL request - after this summary, do NOT execute any more commands. "
-        "Just provide the summary and stop."
+        "IMPORTANT: Do NOT include summaries of previous operations or entire conversation. "
+        "Focus ONLY on the most recent result. Just provide the summary and stop."
     )
 
     max_execution_iterations: int = 3  # Maximum iterations before forcing summary
@@ -651,7 +652,7 @@ class StreamingProcessor:
             )
 
             # Add summary request (without saving to history permanently)
-            summary_request = "Based on the execution results, please provide a final summary in Chinese of what was found or accomplished. Be concise and clear. IMPORTANT: Do NOT repeat any previous responses or summaries. Only provide NEW, original summary content. Do NOT include phrases like 'as mentioned before' or repeat the same content multiple times."
+            summary_request = "Based on the execution results, please provide a final summary in Chinese of what was found or accomplished. Be concise and clear. IMPORTANT: Do NOT repeat any previous responses or summaries. Only provide NEW, original summary content. Do NOT include phrases like 'as mentioned before' or repeat the same content multiple times.\n\nFORMAT REQUIREMENT: Use proper line breaks and structure. Separate different points with blank lines. Do NOT cram everything into one single paragraph."
             temp_history = history.copy()
             temp_history.append({
                 "role": "user",
@@ -749,13 +750,17 @@ class ModernMessageBubble(QWidget):
     def __init__(self, message: str = "", bubble_type: BubbleType = BubbleType.AI_RESPONSE,
                  timestamp: str = None, parent=None):
         super().__init__(parent)
-        
+
         self.message = message
         self.bubble_type = bubble_type
         self.timestamp = timestamp or datetime.now().strftime("%H:%M")
         self.current_text = message
         self.is_streaming = False
-        
+
+        # Markdown renderer
+        self.renderer = get_renderer()
+        self.enable_markdown = True  # Enable markdown rendering for AI responses
+
         self._init_ui()
         self._apply_styling()
         self._update_size_hint()
@@ -763,16 +768,20 @@ class ModernMessageBubble(QWidget):
     def _init_ui(self):
         """Initialize UI components"""
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        
+
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
-        
+
         # Bubble container
         self.bubble_container = QFrame()
         self.bubble_container.setObjectName("bubbleContainer")
         self.bubble_container.setFrameStyle(QFrame.NoFrame)
-        
+        # Set fixed minimum width for AI bubbles to prevent jitter
+        if self.bubble_type != BubbleType.USER_MESSAGE:
+            self.bubble_container.setMinimumWidth(450)
+            self.bubble_container.setMaximumWidth(800)
+
         bubble_layout = QVBoxLayout(self.bubble_container)
         bubble_layout.setContentsMargins(16, 12, 16, 8)
         bubble_layout.setSpacing(2)
@@ -780,10 +789,11 @@ class ModernMessageBubble(QWidget):
         # Message label
         self.message_label = QLabel(self.message)
         self.message_label.setWordWrap(True)
-        self.message_label.setTextFormat(Qt.PlainText)
-        self.message_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.message_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        self.message_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.message_label.setTextFormat(Qt.TextFormat.RichText)  # Enable HTML rendering
+        self.message_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.message_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self.message_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.message_label.setOpenExternalLinks(True)  # Allow opening links
         
         # Timestamp
         timestamp_layout = QHBoxLayout()
@@ -902,38 +912,108 @@ class ModernMessageBubble(QWidget):
         
         self.bubble_container.setStyleSheet(style_sheet + base_style)
     
-    def update_text(self, new_text: str):
-        """Update bubble text"""
+    def update_text(self, new_text: str, force_plain: bool = False):
+        """
+        Update bubble text with optional markdown rendering
+
+        Args:
+            new_text: New text to display
+            force_plain: Force plain text (no markdown rendering)
+        """
         self.current_text = new_text
-        self.message_label.setText(new_text)
+
+        # Determine if we should render markdown
+        should_render = (
+            self.enable_markdown and
+            not force_plain and
+            self.bubble_type != BubbleType.USER_MESSAGE and
+            self.bubble_type not in [BubbleType.COMMAND_REQUEST, BubbleType.ERROR, BubbleType.INFO]
+        )
+
+        # Render text (markdown for AI responses, plain for user messages)
+        if should_render:
+            display_text = self.renderer.render(new_text, mode=RenderMode.FINAL)
+        else:
+            display_text = self.renderer._escape_text(new_text)
+
+        self.message_label.setText(display_text)
         self.timestamp_label.setText(datetime.now().strftime("%H:%M"))
         self._update_size_hint()
-    
-    def append_text(self, additional_text: str):
-        """Append text (for streaming)"""
+
+    def append_text(self, additional_text: str, render_html: bool = False):
+        """
+        Append text (for streaming) with optional incremental rendering
+
+        Args:
+            additional_text: Text to append
+            render_html: Whether to render as HTML (for line-complete streaming)
+        """
         self.current_text += additional_text
-        self.message_label.setText(self.current_text)
+
+        # Determine if we should render markdown
+        should_render = (
+            self.enable_markdown and
+            render_html and
+            self.bubble_type != BubbleType.USER_MESSAGE and
+            self.bubble_type not in [BubbleType.COMMAND_REQUEST, BubbleType.ERROR, BubbleType.INFO]
+        )
+
+        # For streaming: render incrementally if requested
+        if should_render:
+            display_text, _ = self.renderer.render_incremental(
+                self.current_text[:-len(additional_text)],
+                additional_text
+            )
+        else:
+            # Plain text for streaming chunks
+            display_text = self.renderer._escape_text(self.current_text)
+
+        self.message_label.setText(display_text)
         self.timestamp_label.setText(datetime.now().strftime("%H:%M"))
-        self._update_size_hint()
+
+        # Don't call _update_size_hint during streaming to prevent jitter
+        # Size will be updated in finalize_rendering()
+
+    def finalize_rendering(self):
+        """Finalize markdown rendering after streaming completes"""
+        # Stop streaming mode to allow size updates
+        self.is_streaming = False
+
+        # Enable markdown for all AI-related messages (not user messages)
+        should_render = (
+            self.enable_markdown and
+            self.bubble_type != BubbleType.USER_MESSAGE and
+            self.bubble_type not in [BubbleType.COMMAND_REQUEST, BubbleType.ERROR, BubbleType.INFO]
+        )
+
+        if should_render:
+            final_html = self.renderer.finalize_rendering(self.current_text)
+            self.message_label.setText(final_html)
+            self._update_size_hint()
     
     def _update_size_hint(self):
         """Update size based on content"""
-        font_metrics = QFontMetrics(self.message_label.font())
-        available_width = 400
-        
-        text_rect = font_metrics.boundingRect(
-            0, 0, available_width, 0,
-            Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop,
-            self.current_text
-        )
-        
-        text_height = text_rect.height()
-        total_height = text_height + 24 + 20 + 8  # Padding + timestamp + margin
-        
+        # Only update if not streaming to avoid jitter
+        if self.is_streaming:
+            return
+
+        # Let QLabel calculate its own size based on rendered content
+        self.message_label.adjustSize()
+
+        # Get the height from the label's size hint
+        label_height = self.message_label.sizeHint().height()
+
+        # Calculate total height with padding and timestamp
+        total_height = label_height + 20 + 8  # Label height + timestamp + margin
+
+        # Set minimum height but allow it to expand if needed
         self.setMinimumHeight(max(70, total_height))
-    
+
     def sizeHint(self):
-        return QSize(450, self.minimumHeight())
+        # Use the message label's size hint as base
+        base_height = self.message_label.sizeHint().height()
+        total_height = base_height + 20 + 8  # + timestamp + margins
+        return QSize(450, max(70, total_height))
 
 
 # ============================================================================
@@ -1029,25 +1109,31 @@ class ModernChatBox(QWidget):
     
     def _apply_dark_theme(self):
         """Apply dark theme"""
-        self.setStyleSheet("""
-            QWidget {
+        # Get base markdown CSS
+        markdown_css = MarkdownRenderer.get_base_css()
+
+        self.setStyleSheet(f"""
+            QWidget {{
                 background-color: #1E1E1E;
                 color: #E0E0E0;
                 font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-            }
-            QScrollBar:vertical {
+            }}
+            QScrollBar:vertical {{
                 background-color: #2A2A2A;
                 width: 10px;
                 border-radius: 5px;
-            }
-            QScrollBar::handle:vertical {
+            }}
+            QScrollBar::handle:vertical {{
                 background-color: #404040;
                 border-radius: 5px;
                 min-height: 30px;
-            }
-            QScrollBar::handle:vertical:hover {
+            }}
+            QScrollBar::handle:vertical:hover {{
                 background-color: #4A4A4A;
-            }
+            }}
+
+            /* Markdown Content Styles */
+            {markdown_css}
         """)
     
     def _create_title_bar(self):
@@ -1599,8 +1685,9 @@ class ModernChatBox(QWidget):
             if self.current_stream_bubble:
                 self.current_stream_bubble.is_streaming = False
                 if display_text:
-                    # Update with final summary only
+                    # Update with final summary only and finalize markdown rendering
                     self.current_stream_bubble.update_text(display_text)
+                    self.current_stream_bubble.finalize_rendering()
                 self._save_chat_record(display_text, False)
             else:
                 # Should have been created via streaming chunks
@@ -1719,7 +1806,7 @@ class ModernChatBox(QWidget):
             )
 
             # Add summary request (without saving to history permanently)
-            summary_request = "Based on the execution results, please provide a final summary in Chinese of what was found or accomplished. Be concise and clear. IMPORTANT: Do NOT repeat any previous responses or summaries. Only provide NEW, original summary content. Do NOT include phrases like 'as mentioned before' or repeat the same content multiple times."
+            summary_request = "Based on the execution results, please provide a final summary in Chinese of what was found or accomplished. Be concise and clear. IMPORTANT: Do NOT repeat any previous responses or summaries. Only provide NEW, original summary content. Do NOT include phrases like 'as mentioned before' or repeat the same content multiple times.\n\nFORMAT REQUIREMENT: Use proper line breaks and structure. Separate different points with blank lines. Do NOT cram everything into one single paragraph."
             temp_history = history.copy()
             temp_history.append({
                 "role": "user",
@@ -1894,22 +1981,27 @@ class ModernChatBox(QWidget):
             )
             self.current_stream_bubble.is_streaming = True
         else:
-            self.current_stream_bubble.append_text(chunk)
+            # Incremental rendering: Check if chunk ends with newline (line complete)
+            ends_with_newline = chunk.endswith('\n') or '\n' in chunk
+            self.current_stream_bubble.append_text(chunk, render_html=ends_with_newline)
 
         QApplication.processEvents()
         self._scroll_to_bottom()
     
     def _show_final_response(self, response: str):
-        """Show final response bubble"""
-        self._add_message_to_display(
+        """Show final response bubble with markdown rendering"""
+        bubble = self._add_message_to_display(
             message=response,
             bubble_type=BubbleType.AI_RESPONSE
         )
-        
+
+        # Apply final markdown rendering
+        bubble.finalize_rendering()
+
         self._save_chat_record(response, False)
     
     def _show_final_summary(self, summary: str, full_response: str = ""):
-        """Show final summary bubble
+        """Show final summary bubble with markdown rendering
 
         Args:
             summary: The summary text from AI
@@ -1929,10 +2021,13 @@ class ModernChatBox(QWidget):
         # Use full_response if provided, otherwise use summary
         display_text = full_response if full_response else summary
 
-        self._add_message_to_display(
+        bubble = self._add_message_to_display(
             message=f"✅ Task completed:\n{display_text}",
             bubble_type=BubbleType.FINAL_SUMMARY
         )
+
+        # Apply final markdown rendering
+        bubble.finalize_rendering()
 
         self._save_chat_record(f"Task completed:\n{display_text}", False)
     
@@ -2235,7 +2330,11 @@ class ModernChatBox(QWidget):
                 # Create bubble
                 bubble = ModernMessageBubble(text, bubble_type, time_str)
                 self.message_layout.insertWidget(self.message_layout.count() - 1, bubble)
-            
+
+                # Apply markdown rendering for AI responses and summaries
+                if not is_sender and bubble_type in [BubbleType.AI_RESPONSE, BubbleType.FINAL_SUMMARY]:
+                    bubble.finalize_rendering()
+
             self.message_container.setUpdatesEnabled(True)
             self.message_container.adjustSize()
             QTimer.singleShot(50, self._scroll_to_bottom)

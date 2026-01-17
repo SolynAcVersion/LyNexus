@@ -596,7 +596,7 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
                     # Add execution result to history with guidance
                     current_history.append({
                         "role": "user",
-                        "content": f"Execution result: {res}\n\nBased on this result, please decide the next step. If the task is complete or the command failed, provide a final summary in Chinese of what was accomplished or found."
+                        "content": f"Execution result: {res}\n\nBased on this result, please decide the next step. If the task is complete or the command failed, provide a final summary in Chinese of what was accomplished or found.\n\nIMPORTANT: Format your summary with proper line breaks and structure. Use separate lines for different points. Do not cram everything into one paragraph."
                     })
                     
                     iteration += 1

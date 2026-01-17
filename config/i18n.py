@@ -56,6 +56,14 @@ class I18n:
                 
                 # Chat names
                 "general_chat": "Chat 1",
+
+                # History usage guidance (隐藏的系统提示，用于引导AI正确使用历史记录)
+                "history_guideline_reference_only": "Treat conversation history as a knowledge base for reference only",
+                "history_guideline_focus_current": "Only address what the user is currently asking, do not recap or summarize previous interactions unless explicitly requested",
+                "history_guideline_avoid_association": "Do not make assumptions or connections between unrelated conversations",
+                "history_guideline_no_summarization": "Do not provide summaries or evaluations of the entire conversation session when answering simple questions",
+                "history_guideline_independent": "Each response should focus on the current question, not continuously reference or build upon previous topics",
+                "history_guideline_exception": "If the user explicitly asks for a summary, recap, or relationship analysis, then follow the user's specific request",
             },
             "zh": {
                 # General
@@ -96,6 +104,14 @@ class I18n:
                 
                 # Chat names
                 "general_chat": "对话 1",
+
+                # History usage guidance (隐藏的系统提示，用于引导AI正确使用历史记录)
+                "history_guideline_reference_only": "将对话历史仅作为知识库参考",
+                "history_guideline_focus_current": "只回答用户当前询问的内容，除非明确要求，否则不要回顾或总结之前的对话",
+                "history_guideline_avoid_association": "不要在不相关的对话之间做假设或建立联系",
+                "history_guideline_no_summarization": "回答简单问题时，不要对整个对话会话进行总结或评价",
+                "history_guideline_independent": "每次回答应专注于当前问题，不要持续引用或基于之前的话题展开",
+                "history_guideline_exception": "如果用户明确要求总结、回顾或关联分析，则遵循用户的具体要求",
             }
         }
         

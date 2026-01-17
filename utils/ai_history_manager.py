@@ -10,13 +10,37 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
 
+from config.i18n import i18n
+
 
 class AIHistoryManager:
     """
     AI Conversation History Manager
     Manages AI's conv_his, completely separate from chat display history
     """
-    
+
+    # 隐藏的历史记录使用指导（代码内控制，用户不可见）
+    HISTORY_USAGE_GUIDANCE = """
+【Conversation History Usage Guidelines】
+1. **Reference Only**: {history_guideline_reference_only}
+2. **Focus on Current Question**: {history_guideline_focus_current}
+3. **Avoid Unnecessary Association**: {history_guideline_avoid_association}
+4. **No Retroactive Summarization**: {history_guideline_no_summarization}
+5. **Independent Responses**: {history_guideline_independent}
+6. **Exception**: {history_guideline_exception}
+"""
+
+    def get_history_usage_guidance(self):
+        """获取 i18n 化的历史记录使用指导"""
+        return self.HISTORY_USAGE_GUIDANCE.format(
+            history_guideline_reference_only=i18n.tr("history_guideline_reference_only"),
+            history_guideline_focus_current=i18n.tr("history_guideline_focus_current"),
+            history_guideline_avoid_association=i18n.tr("history_guideline_avoid_association"),
+            history_guideline_no_summarization=i18n.tr("history_guideline_no_summarization"),
+            history_guideline_independent=i18n.tr("history_guideline_independent"),
+            history_guideline_exception=i18n.tr("history_guideline_exception")
+        )
+
     def __init__(self, ai_conv_dir: str = "ai_conv"):
         self.ai_conv_dir = Path(ai_conv_dir)
         self.ai_conv_dir.mkdir(exist_ok=True, parents=True)
@@ -28,12 +52,31 @@ class AIHistoryManager:
         safe_name = safe_name.strip() or "default"
         return self.ai_conv_dir / f"{safe_name}_ai.json"
     
+    def _user_has_history_instructions(self, system_prompt: str) -> bool:
+        """检查用户的 system_prompt 是否已经包含明确的历史记录使用指示"""
+        if not system_prompt:
+            return False
+
+        # 检查是否包含明确的历史记录使用相关关键词
+        history_keywords = [
+            '历史记录', 'history', 'conversation history',
+            '上下文', 'context', 'previous conversation',
+            '总结历史', 'summarize history', 'recap'
+        ]
+
+        system_lower = system_prompt.lower()
+        for keyword in history_keywords:
+            if keyword.lower() in system_lower:
+                return True
+
+        return False
+
     def load_history(self, conversation_name: str, system_prompt: str = None) -> List[Dict]:
         """Load AI conversation history"""
         history_file = self.get_history_file(conversation_name)
-        
+
         loaded_history = []
-        
+
         if history_file.exists():
             try:
                 with open(history_file, 'r', encoding='utf-8') as f:
@@ -41,20 +84,31 @@ class AIHistoryManager:
                 print(f"[AIHistory] Loaded {len(loaded_history)} messages from {history_file}")
             except Exception as e:
                 print(f"[AIHistory] Failed to load history: {e}")
-        
+
         # Ensure system prompt is at the beginning
         if system_prompt:
-            # Remove any existing system prompts
+            # 移除所有现有的 system 消息
             filtered_history = [msg for msg in loaded_history if msg.get("role") != "system"]
-            # Add new system prompt at the beginning
-            filtered_history.insert(0, {"role": "system", "content": system_prompt})
+
+            # 构建完整的 system prompt
+            final_system_prompt = system_prompt
+
+            # 检查用户是否已经提供了明确的历史记录使用指示
+            if not self._user_has_history_instructions(system_prompt):
+                # 自动注入隐藏的历史记录使用指导（使用 i18n）
+                final_system_prompt = system_prompt + self.get_history_usage_guidance()
+                print(f"[AIHistory] Injected history usage guidance (user had no specific instructions)")
+
+            # 添加完整的 system prompt 到开头
+            filtered_history.insert(0, {"role": "system", "content": final_system_prompt})
             return filtered_history
         elif loaded_history and loaded_history[0].get("role") == "system":
             return loaded_history
         else:
-            # Return default system prompt
+            # Return default system prompt with history guidance (使用 i18n)
+            default_prompt = "You are an AI assistant that can execute commands when requested."
             return [
-                {"role": "system", "content": "You are an AI assistant that can execute commands when requested."}
+                {"role": "system", "content": default_prompt + self.get_history_usage_guidance()}
             ]
     
     def save_history(self, conversation_name: str, history: List[Dict]):
