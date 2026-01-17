@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QInputDialog, QMessageBox, QStatusBar, QFileDialog,
     QSizePolicy, QSpacerItem, QApplication, QProgressBar
 )
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QTextCursor, QTextDocument
 from PySide6.QtCore import (
     Qt, QTimer, QThread, Signal, QSize, QPoint, QRect, QEvent,
     QPropertyAnimation, QEasingCurve, QParallelAnimationGroup,
@@ -48,6 +48,73 @@ from aiclass import AI
 # DATA STRUCTURES
 # ============================================================================
 
+class DragDropTextEdit(QTextEdit):
+    """Custom QTextEdit with proper drag and drop handling for file paths"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.parent_chat_box = None  # Reference to parent chat box
+
+    def setParentChatBox(self, chat_box):
+        """Set reference to parent chat box"""
+        self.parent_chat_box = chat_box
+
+    def dragEnterEvent(self, event):
+        """Handle drag enter event"""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        """Handle drag move event"""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        """Handle drop event - insert file paths at cursor position"""
+        if event.mimeData().hasUrls():
+            files = [u.toLocalFile() for u in event.mimeData().urls()]
+
+            # Build file paths string
+            file_paths = ' '.join(f'"{f}"' for f in files if os.path.exists(f))
+
+            if file_paths:
+                print(f"[DragDropTextEdit] Inserting file paths: {file_paths}")
+
+                # Get current state
+                cursor = self.textCursor()
+                position = cursor.position()
+                text = self.toPlainText()
+
+                print(f"[DragDropTextEdit] Before - Text length: {len(text)}, Cursor at: {position}")
+
+                # Insert at cursor position
+                new_text = text[:position] + file_paths + ' ' + text[position:]
+                new_cursor_pos = position + len(file_paths) + 1
+
+                # Set new text
+                self.setPlainText(new_text)
+
+                # Position cursor
+                new_cursor = QTextCursor(self.document())
+                new_cursor.setPosition(min(new_cursor_pos, len(new_text)), QTextCursor.MoveMode.MoveAnchor)
+                new_cursor.clearSelection()
+                self.setTextCursor(new_cursor)
+
+                print(f"[DragDropTextEdit] After - Text length: {len(new_text)}, Cursor at: {new_cursor_pos}")
+
+                # Ensure cursor is visible
+                self.ensureCursorVisible()
+
+            event.acceptProposedAction()
+        else:
+            # Let parent handle non-URL drops
+            super().dropEvent(event)
+
 @dataclass
 class ConversationConfig:
     """Configuration for a conversation session"""
@@ -67,11 +134,11 @@ class ConversationConfig:
     # Customizable prompts for command execution flow
     command_execution_prompt: str = (
         "Execution result: {result}\n\n"
-        "CRITICAL INSTRUCTION: If the task is COMPLETE, provide a FINAL SUMMARY in Chinese of ONLY this specific result - "
-        "do NOT summarize previous operations or entire conversation history. "
-        "Focus ONLY on what was accomplished in THIS execution. "
-        "Then STOP - do NOT execute any more commands. Only execute another command if this result shows the task is incomplete "
-        "and you have a clear next step."
+        "IMPORTANT: This result is from the tool execution. The user CANNOT see this result - only your response will be shown to the user.\n\n"
+        "You must process this result and provide your actual answer/output to the user. Do NOT consider the task complete "
+        "just because a tool was executed. The task is only complete when you have provided the user with the actual "
+        "information or output they requested.\n\n"
+        "Continue processing if needed, or provide your final answer if you have completed what the user asked for."
     )
 
     command_retry_prompt: str = (
@@ -1379,13 +1446,15 @@ class ModernChatBox(QWidget):
         input_layout.setSpacing(12)
         
         # Input text box
-        self.input_text = QTextEdit()
+        self.input_text = DragDropTextEdit()
+        self.input_text.setParentChatBox(self)
         self.input_text.setPlaceholderText(i18n.tr("type_message"))
         self.input_text.setAcceptRichText(False)
-        # Enable drag and drop
-        self.input_text.setAcceptDrops(True)
-        self.input_text.dragEnterEvent = self.input_drag_enter_event
-        self.input_text.dropEvent = self.input_drop_event
+        self.input_text.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextEditorInteraction |
+            Qt.TextInteractionFlag.TextSelectableByKeyboard |
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
         self.input_text.setStyleSheet("""
             QTextEdit {
                 background-color: #2D2D2D;
@@ -1666,7 +1735,18 @@ class ModernChatBox(QWidget):
                     # Update with final summary only and finalize markdown rendering
                     self.current_stream_bubble.update_text(display_text)
                     self.current_stream_bubble.finalize_rendering()
-                self._save_chat_record(display_text, False)
+                    # Save the final bubble content
+                    self._save_chat_record(display_text, False)
+                else:
+                    # No display text but have bubble, save its current content
+                    if hasattr(self.current_stream_bubble, 'message_label'):
+                        bubble_text = self.current_stream_bubble.message_label.text()
+                        if bubble_text and bubble_text.strip():
+                            from PySide6.QtGui import QTextDocument
+                            doc = QTextDocument()
+                            doc.setHtml(bubble_text)
+                            plain_text = doc.toPlainText()
+                            self._save_chat_record(plain_text, False)
             else:
                 # Should have been created via streaming chunks
                 print("[ChatBox] No stream bubble found, showing final response")
@@ -1938,9 +2018,22 @@ class ModernChatBox(QWidget):
                     # Enter command mode - stop displaying
                     self._in_command_mode = True
 
-                    # Clear any bubble that was created before the command
+                    # Save any content that was shown before the command
                     if self.current_stream_bubble:
-                        print("[ChatBox] Clearing bubble that had content before command")
+                        print("[ChatBox] Saving bubble content before removing it")
+                        # Get the current text from the bubble before removing
+                        if hasattr(self.current_stream_bubble, 'message_label'):
+                            bubble_text = self.current_stream_bubble.message_label.text()
+                            if bubble_text and bubble_text.strip():
+                                # Convert HTML back to plain text for storage
+                                from PySide6.QtGui import QTextDocument
+                                doc = QTextDocument()
+                                doc.setHtml(bubble_text)
+                                plain_text = doc.toPlainText()
+                                self._save_chat_record(plain_text, False)
+                                print(f"[ChatBox] Saved pre-command content: {plain_text[:50]}...")
+
+                        print("[ChatBox] Removing bubble that had content before command")
                         self._remove_bubble(self.current_stream_bubble)
                         self.current_stream_bubble = None
                         self._accumulated_before_command = ""
@@ -2034,8 +2127,21 @@ class ModernChatBox(QWidget):
             self._remove_bubble(self.last_command_bubble)
             self.last_command_bubble = None
 
-        # Also remove current streaming bubble if it exists
+        # Save and remove current streaming bubble if it exists
         if self.current_stream_bubble:
+            print("[ChatBox] Saving streaming bubble content before final summary")
+            # Get the current text from the bubble before removing
+            if hasattr(self.current_stream_bubble, 'message_label'):
+                bubble_text = self.current_stream_bubble.message_label.text()
+                if bubble_text and bubble_text.strip():
+                    # Convert HTML back to plain text for storage
+                    from PySide6.QtGui import QTextDocument
+                    doc = QTextDocument()
+                    doc.setHtml(bubble_text)
+                    plain_text = doc.toPlainText()
+                    self._save_chat_record(plain_text, False)
+                    print(f"[ChatBox] Saved streaming content before summary: {plain_text[:50]}...")
+
             self._remove_bubble(self.current_stream_bubble)
             self.current_stream_bubble = None
 
@@ -2679,37 +2785,6 @@ class ModernChatBox(QWidget):
         else:
             super().keyPressEvent(event)
 
-    def input_drag_enter_event(self, event):
-        """Handle drag enter event for input text box"""
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-        else:
-            event.ignore()
-
-    def input_drop_event(self, event):
-        """Handle drop event for input text box - insert file paths"""
-        if event.mimeData().hasUrls():
-            files = [u.toLocalFile() for u in event.mimeData().urls()]
-            # Get current text and cursor position
-            current_text = self.input_text.toPlainText()
-
-            # Insert file paths at the beginning of the text
-            file_paths = ' '.join(f'"{f}"' for f in files if os.path.exists(f))
-            if file_paths:
-                # Insert at the beginning with a trailing space
-                new_text = file_paths + ' ' + current_text
-                self.input_text.setPlainText(new_text)
-
-                # Move cursor to position after the file paths and space
-                cursor = self.input_text.textCursor()
-                cursor.setPosition(len(file_paths) + 1)
-                self.input_text.setTextCursor(cursor)
-                # Ensure focus is on the input text
-                self.input_text.setFocus()
-
-            event.acceptProposedAction()
-        else:
-            event.ignore()
 
 
 # ============================================================================

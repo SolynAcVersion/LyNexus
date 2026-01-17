@@ -74,9 +74,11 @@ class AI:
         # 自定义提示词（从配置或使用默认值）
         self.command_execution_prompt = command_execution_prompt or (
             "Execution result: {result}\n\n"
-            "CRITICAL INSTRUCTION: If the task is COMPLETE, provide a FINAL SUMMARY in Chinese and then STOP - "
-            "do NOT execute any more commands. Only execute another command if this result shows the task is incomplete "
-            "and you have a clear next step."
+            "IMPORTANT: This result is from the tool execution. The user CANNOT see this result - only your response will be shown to the user.\n\n"
+            "You must process this result and provide your actual answer/output to the user. Do NOT consider the task complete "
+            "just because a tool was executed. The task is only complete when you have provided the user with the actual "
+            "information or output they requested.\n\n"
+            "Continue processing if needed, or provide your final answer if you have completed what the user asked for."
         )
 
         self.command_retry_prompt = command_retry_prompt or (

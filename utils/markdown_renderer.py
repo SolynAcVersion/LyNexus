@@ -61,7 +61,7 @@ class MarkdownRenderer:
             'tables',
             'sane_lists',
             'codehilite',
-            'nl2br',  # 自动将换行符转换为 <br>
+            # 'nl2br',  # 移除 nl2br，让markdown按标准处理换行（单个\n不换行，两个\n\n才换段落）
         ]
 
         # Add KaTeX if available
@@ -151,8 +151,21 @@ class MarkdownRenderer:
         return self.render(text, mode=RenderMode.FINAL)
 
     def _escape_text(self, text: str) -> str:
-        """Escape text as HTML (for plain text display)"""
-        return html.escape(text).replace('\n', '<br>')
+        """
+        Escape text as HTML (for plain text display)
+
+        换行处理策略：
+        - 单个 \n 不换行（保持原样）
+        - 两个 \n 才换段落（替换为 <br><br>）
+        """
+        # 先转义HTML特殊字符
+        escaped = html.escape(text)
+
+        # 只处理连续换行（两个或更多\n才换段落）
+        # 保持单个\n不变，这样不会破坏Markdown的换行处理
+        escaped = escaped.replace('\n\n', '<br><br>')
+
+        return escaped
 
     def _apply_styling(self, html_content: str, mode: RenderMode) -> str:
         """
