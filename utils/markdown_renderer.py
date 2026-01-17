@@ -75,6 +75,70 @@ class MarkdownRenderer:
             print(f"[MarkdownRenderer] Error initializing markdown: {e}")
             return None
 
+    def preprocess_text(self, text: str) -> str:
+        """
+        Preprocess text to fix common markdown formatting issues
+
+        This fixes:
+        - Missing blank lines after headings
+        - Missing blank lines between list items
+        - Compressed sections that need separation
+
+        Args:
+            text: Raw text to preprocess
+
+        Returns:
+            Preprocessed text with proper formatting
+        """
+        if not text:
+            return text
+
+        lines = text.split('\n')
+        processed_lines = []
+        prev_line_type = None
+
+        for i, line in enumerate(lines):
+            line_type = self._detect_line_type(line)
+            prev_line = lines[i-1] if i > 0 else ""
+            prev_line_type = prev_line_type or self._detect_line_type(prev_line)
+
+            # Add blank line before headings if previous line wasn't blank
+            if line_type == 'heading' and prev_line_type not in ['blank', 'heading', None]:
+                processed_lines.append('')
+
+            # Add blank line between major sections
+            # (non-list, non-code lines that follow different types)
+            if (line_type in ['text', 'list', 'code'] and
+                prev_line_type not in ['blank', None, line_type] and
+                not line.strip().startswith('```')):
+
+                # Check if this looks like a section transition
+                if (line_type == 'list' and prev_line_type == 'text') or \
+                   (line_type == 'text' and prev_line_type == 'list'):
+                    processed_lines.append('')
+
+            processed_lines.append(line)
+            prev_line_type = line_type
+
+        return '\n'.join(processed_lines)
+
+    def _detect_line_type(self, line: str) -> str:
+        """Detect the type of a line for preprocessing"""
+        stripped = line.strip()
+
+        if not stripped:
+            return 'blank'
+        elif stripped.startswith('#'):
+            return 'heading'
+        elif stripped.startswith('```') or stripped.startswith('    '):
+            return 'code'
+        elif stripped.startswith(('-', '*', '+', '•', '○', '●')) and stripped[1] in (' ', '-', '*', '+'):
+            return 'list'
+        elif stripped[0].isdigit() and stripped[1] in ('.', ')'):
+            return 'list'
+        else:
+            return 'text'
+
     def render(self, text: str, mode: RenderMode = RenderMode.FINAL) -> str:
         """
         Render markdown text to HTML
@@ -93,6 +157,9 @@ class MarkdownRenderer:
             return self._escape_text(text)
 
         try:
+            # Preprocess text to fix formatting issues
+            text = self.preprocess_text(text)
+
             # Reset markdown instance
             self.md.reset()
 
@@ -148,6 +215,8 @@ class MarkdownRenderer:
         Returns:
             Fully rendered HTML
         """
+        # Preprocess to fix any formatting issues
+        text = self.preprocess_text(text)
         return self.render(text, mode=RenderMode.FINAL)
 
     def _escape_text(self, text: str) -> str:
@@ -155,15 +224,19 @@ class MarkdownRenderer:
         Escape text as HTML (for plain text display)
 
         换行处理策略：
-        - 单个 \n 不换行（保持原样）
-        - 两个 \n 才换段落（替换为 <br><br>）
+        - 单个 \n 转换为 <br>（用于流式输出）
+        - 两个 \n 转换为 <br><br>（段落分隔）
         """
         # 先转义HTML特殊字符
         escaped = html.escape(text)
 
-        # 只处理连续换行（两个或更多\n才换段落）
-        # 保持单个\n不变，这样不会破坏Markdown的换行处理
-        escaped = escaped.replace('\n\n', '<br><br>')
+        # 处理换行符
+        # 先处理双换行（段落分隔），避免被单换行处理破坏
+        escaped = escaped.replace('\n\n', '<PARA_BREAK>')
+        # 再处理单换行（单行换行）
+        escaped = escaped.replace('\n', '<br>')
+        # 最后恢复段落分隔
+        escaped = escaped.replace('<PARA_BREAK>', '<br><br>')
 
         return escaped
 

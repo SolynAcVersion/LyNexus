@@ -1033,7 +1033,7 @@ class ModernMessageBubble(QWidget):
                 additional_text
             )
         else:
-            # Plain text for streaming chunks
+            # Plain text for streaming chunks - preserve newlines!
             display_text = self.renderer._escape_text(self.current_text)
 
         self.message_label.setText(display_text)
@@ -1997,7 +1997,7 @@ class ModernChatBox(QWidget):
         IMPORTANT: Filter out ALL command-related content before display.
         Only show clean final results to the user.
         """
-        if not chunk or not chunk.strip():
+        if not chunk:
             return
 
         # Initialize command filtering state
@@ -2068,12 +2068,13 @@ class ModernChatBox(QWidget):
                         # Create new bubble for the final conclusion
                         if self.current_stream_bubble is None:
                             self.current_stream_bubble = self._add_message_to_display(
-                                message=chunk_clean,
+                                message=chunk,
                                 bubble_type=BubbleType.AI_RESPONSE
                             )
                             self.current_stream_bubble.is_streaming = True
                         else:
-                            self.current_stream_bubble.append_text(chunk_clean)
+                            # Pass the original chunk with newlines preserved
+                            self.current_stream_bubble.append_text(chunk, render_html=True)
 
                         QApplication.processEvents()
                         self._scroll_to_bottom()
@@ -2082,9 +2083,9 @@ class ModernChatBox(QWidget):
                         # Still in command mode, skip this chunk
                         return
 
-        # Not in command mode - display content normally
-        chunk = chunk.strip()
-        if not chunk:
+        # CRITICAL FIX: Don't strip the chunk! Preserve newlines and formatting
+        # Only skip completely empty chunks
+        if not chunk or chunk.isspace():
             return
 
         # Create or update streaming bubble (only for clean content)
@@ -2095,8 +2096,9 @@ class ModernChatBox(QWidget):
             )
             self.current_stream_bubble.is_streaming = True
         else:
-            # Incremental rendering: Check if chunk ends with newline (line complete)
-            ends_with_newline = chunk.endswith('\n') or '\n' in chunk
+            # Incremental rendering: Always try to render for streaming
+            # Check if chunk ends with newline (line complete)
+            ends_with_newline = chunk.endswith('\n')
             self.current_stream_bubble.append_text(chunk, render_html=ends_with_newline)
 
         QApplication.processEvents()
