@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt, Signal
 
 from config.i18n import i18n
 from utils.config_manager import ConfigManager
+from utils.chat_data_manager import ChatDataManager
 
 class SettingsDialog(QWidget):
     """
@@ -33,6 +34,7 @@ class SettingsDialog(QWidget):
         self.conversation_name = conversation_name
         self.mcp_paths = []  # Store MCP paths
         self.config_manager = ConfigManager()
+        self.chat_data_manager = ChatDataManager()
         
         self.setWindowTitle(f"Lynexus - Settings ({conversation_name})")
         self.resize(700, 800)
@@ -444,6 +446,15 @@ class SettingsDialog(QWidget):
     
     def update_mcp_files_display(self):
         """Update the MCP files display label."""
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_paths = []
+        for path in self.mcp_paths:
+            if path not in seen:
+                seen.add(path)
+                unique_paths.append(path)
+        self.mcp_paths = unique_paths
+
         if self.mcp_paths:
             display_text = f"MCP Files: {len(self.mcp_paths)} loaded\n\n"
             for i, path in enumerate(self.mcp_paths[:5], 1):
@@ -461,17 +472,27 @@ class SettingsDialog(QWidget):
         file_dialog.setWindowTitle("Add MCP Files")
         file_dialog.setFileMode(QFileDialog.ExistingFile)
         selected_files, _ = file_dialog.getOpenFileNames(
-            self, "Select MCP Files", "", 
+            self, "Select MCP Files", "",
             "All Supported (*.py *.json *.yaml *.yml);;"
             "Python Files (*.py);;"
             "JSON Files (*.json);;"
             "YAML Files (*.yaml *.yml)"
         )
-        
+
         if selected_files:
-            # Add to paths list
-            self.mcp_paths.extend(selected_files)
-            
+            # Create chat folder if it doesn't exist
+            if not self.chat_data_manager.chat_exists(self.conversation_name):
+                self.chat_data_manager.create_chat_folder(self.conversation_name)
+
+            # Copy MCP files to chat folder and get absolute paths
+            for file in selected_files:
+                copied_path = self.chat_data_manager.copy_mcp_tool_to_chat(self.conversation_name, file)
+                if copied_path and copied_path not in self.mcp_paths:
+                    self.mcp_paths.append(copied_path)
+                elif file not in self.mcp_paths:
+                    # If copy failed, still add original path
+                    self.mcp_paths.append(file)
+
             # Update display
             self.update_mcp_files_display()
     

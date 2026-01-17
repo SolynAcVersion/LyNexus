@@ -1,11 +1,10 @@
 {
   "chat_list": [
-    "new",
-    "1"
+    "filre_operator"
   ],
   "app_settings": {
     "window_width": 1400,
     "window_height": 900,
-    "last_active_chat": "new"
+    "last_active_chat": "filre_operator"
   }
 }

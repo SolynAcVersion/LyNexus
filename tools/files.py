@@ -1,7 +1,7 @@
 """
-MCP 文件操作模块
-提供基本的文件操作功能，所有函数均包含详细的参数说明、返回值说明和异常处理说明。
-注意：所有字符串参数中的 \n、\t 等转义符将按照 Python 字符串规则解释，即 \n 表示换行符。
+MCP File Operations Module
+Provides basic file operation functionality with detailed parameter descriptions, return value descriptions, and exception handling.
+Note: All escape characters (like \\n, \\t) in string parameters will be interpreted according to Python string rules, where \\n represents a newline character.
 """
 
 import os
@@ -11,18 +11,24 @@ from typing import Union, List, Dict
 
 def mv(source: str, destination: str) -> str:
     """
-    移动文件或目录到指定路径。
+    Move a file or directory to the specified path.
 
     Args:
-        source (str): 源文件或目录的路径。
-        destination (str): 目标路径。如果目标路径不存在，请先使用 mkdir 创建。
+        source (str, REQUIRED): Source file or directory path.
+            Example: "/home/user/documents/file.txt" or "C:\\Users\\user\\Documents\\file.txt"
+        destination (str, REQUIRED): Target path. If the target path does not exist, use mkdir to create it first.
+            Example: "/home/user/backup/file.txt" or "C:\\Users\\user\\Backup\\file.txt"
 
     Returns:
-        str: 操作结果信息字符串。
+        str: Operation result message string.
 
     Raises:
-        FileNotFoundError: 当源路径不存在时。
-        shutil.Error: 移动过程中发生的错误。
+        FileNotFoundError: When the source path does not exist.
+        shutil.Error: Errors during the move operation.
+
+    Example:
+        mv("/home/user/file.txt", "/home/user/backup/file.txt")
+        Returns: "已将 /home/user/file.txt 移动到 /home/user/backup/file.txt"
     """
     if not os.path.exists(source):
         raise FileNotFoundError(f"源文件/目录不存在: {source}")
@@ -33,18 +39,24 @@ def mv(source: str, destination: str) -> str:
 
 def cp(source: str, destination: str) -> str:
     """
-    复制文件或目录到指定路径。
+    Copy a file or directory to the specified path.
 
     Args:
-        source (str): 源文件或目录的路径。
-        destination (str): 目标路径。
+        source (str, REQUIRED): Source file or directory path.
+            Example: "/home/user/documents/report.pdf" or "C:\\Users\\user\\Documents\\report.pdf"
+        destination (str, REQUIRED): Target path.
+            Example: "/home/user/backup/report.pdf" or "C:\\Users\\user\\Backup\\report.pdf"
 
     Returns:
-        str: 操作结果信息字符串。
+        str: Operation result message string.
 
     Raises:
-        FileNotFoundError: 当源路径不存在时。
-        shutil.Error: 复制过程中发生的错误。
+        FileNotFoundError: When the source path does not exist.
+        shutil.Error: Errors during the copy operation.
+
+    Example:
+        cp("/home/user/report.pdf", "/home/user/backup/report.pdf")
+        Returns: "已将 /home/user/report.pdf 复制到 /home/user/backup/report.pdf"
     """
     if not os.path.exists(source):
         raise FileNotFoundError(f"源文件/目录不存在: {source}")
@@ -59,16 +71,21 @@ def cp(source: str, destination: str) -> str:
 
 def ls(directory: str = ".") -> str:
     """
-    列出指定目录下的所有文件和子目录。
+    List all files and subdirectories in the specified directory.
 
     Args:
-        directory (str): 要列出内容的目录路径，默认为当前目录。
+        directory (str, OPTIONAL): Directory path to list contents from. Defaults to current directory.
+            Example: "/home/user/documents" or "C:\\Users\\user\\Documents" or "." for current directory
 
     Returns:
-        str: 目录内容列表的字符串表示。
+        str: String representation of the directory contents list.
 
     Raises:
-        FileNotFoundError: 当指定目录不存在时。
+        FileNotFoundError: When the specified directory does not exist.
+
+    Example:
+        ls("/home/user/documents")
+        Returns: "/home/user/documents 中的内容: file1.txt, file2.pdf, folder1"
     """
     if not os.path.exists(directory):
         raise FileNotFoundError(f"目录不存在: {directory}")
@@ -79,16 +96,21 @@ def ls(directory: str = ".") -> str:
 
 def mkdir(directory: str) -> str:
     """
-    创建目录。如果目录已存在，不会覆盖。
+    Create a directory. If the directory already exists, it will not be overwritten.
 
     Args:
-        directory (str): 要创建的目录路径。
+        directory (str, REQUIRED): Path of the directory to create.
+            Example: "/home/user/new_folder" or "C:\\Users\\user\\NewFolder"
 
     Returns:
-        str: 操作结果信息字符串。
+        str: Operation result message string.
 
     Raises:
-        OSError: 当目录创建失败时。
+        OSError: When directory creation fails.
+
+    Example:
+        mkdir("/home/user/new_folder")
+        Returns: "已创建目录: /home/user/new_folder"
     """
     if os.path.exists(directory):
         return f"目录已存在: {directory}"
@@ -99,17 +121,22 @@ def mkdir(directory: str) -> str:
 
 def rm(path: str) -> str:
     """
-    删除文件或目录。如果是目录，会递归删除整个目录树。
+    Delete a file or directory. If it's a directory, the entire directory tree will be recursively deleted.
 
     Args:
-        path (str): 要删除的文件或目录路径。
+        path (str, REQUIRED): Path of the file or directory to delete.
+            Example: "/home/user/old_file.txt" or "C:\\Users\\user\\OldFolder"
 
     Returns:
-        str: 操作结果信息字符串。
+        str: Operation result message string.
 
     Raises:
-        FileNotFoundError: 当路径不存在时。
-        OSError: 当删除失败时。
+        FileNotFoundError: When the path does not exist.
+        OSError: When deletion fails.
+
+    Example:
+        rm("/home/user/old_file.txt")
+        Returns: "已删除: /home/user/old_file.txt"
     """
     if not os.path.exists(path):
         raise FileNotFoundError(f"文件/目录不存在: {path}")
@@ -124,18 +151,23 @@ def rm(path: str) -> str:
 
 def cat(filepath: str) -> str:
     """
-    读取文件内容并返回。
+    Read file content and return it.
 
     Args:
-        filepath (str): 要读取的文件路径。
+        filepath (str, REQUIRED): Path of the file to read.
+            Example: "/home/user/documents/note.txt" or "C:\\Users\\user\\Documents\\note.txt"
 
     Returns:
-        str: 文件内容字符串。
+        str: File content as a string.
 
     Raises:
-        FileNotFoundError: 当文件不存在时。
-        UnicodeDecodeError: 当文件编码非UTF-8且无法用GBK解码时。
-        IOError: 当文件读取失败时。
+        FileNotFoundError: When the file does not exist.
+        UnicodeDecodeError: When the file encoding is not UTF-8 and cannot be decoded with GBK.
+        IOError: When file reading fails.
+
+    Example:
+        cat("/home/user/documents/note.txt")
+        Returns: "This is the content of the file..."
     """
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"文件不存在: {filepath}")
@@ -158,21 +190,29 @@ def cat(filepath: str) -> str:
 
 def write_to_file(text: str, filepath: Union[str, None], mode: str) -> str:
     """
-    将文本写入文件。如果 filepath 为 None，则直接返回文本。
+    Write text to a file. If filepath is None, return the text directly.
 
     Args:
-        text (str): 要写入的文本。注意：字符串中的转义符（如 \n、\t）会按照 Python 规则解释，
-                    即 \n 会被解释为换行符。如果希望写入原始反斜杠和 n，请使用 \\\\n。
-        filepath (Union[str, None]): 文件路径。如果为 None，则直接返回 text。
-        mode (int): 写入模式，0 表示覆盖写入，1 表示追加写入。
+        text (str, REQUIRED): Text to write. Note: Escape characters in the string (like \\n, \\t) will be
+            interpreted according to Python rules, where \\n is interpreted as a newline character.
+            If you want to write a literal backslash and n, use \\\\n.
+            Example: "Hello, World!\\nThis is a new line." or "Hello\\tWorld"
+        filepath (Union[str, None], REQUIRED): File path. If None, return text directly.
+            Example: "/home/user/output.txt" or "C:\\Users\\user\\output.txt" or None
+        mode (str, REQUIRED): Write mode. Use '0' for overwrite, '1' for append.
+            Example: "0" (overwrite) or "1" (append)
 
     Returns:
-        str: 写入成功的信息字符串，或当 filepath 为 None 时直接返回 text。
+        str: Success message string, or the text itself if filepath is None.
 
     Raises:
-        ValueError: 当 filepath 为空字符串或 mode 不为 0 或 1 时。
-        TypeError: 当 text 不是字符串类型时。
-        OSError: 当文件写入失败时。
+        ValueError: When filepath is an empty string or mode is not '0' or '1'.
+        TypeError: When text is not a string type.
+        OSError: When file writing fails.
+
+    Example:
+        write_to_file("Hello, World!\\n", "/home/user/output.txt", "0")
+        Returns: "已将文本覆盖写入 /home/user/output.txt"
     """
     if filepath is None:
         return text
@@ -215,25 +255,35 @@ def find_lines_in_file(
     file_path: str, search_string: str, case_sensitive: bool = True
 ) -> List[Dict[str, Union[int, str]]]:
     """
-    从文件中查找包含指定字符串的所有行，并返回行号、内容和原始内容。
+    Find all lines containing the specified string in a file, and return line numbers, content, and original content.
 
     Args:
-        file_path (str): 要搜索的文件路径。
-        search_string (str): 要查找的字符串，不能为空。
-        case_sensitive (bool): 是否区分大小写，默认为 True（区分）。
+        file_path (str, REQUIRED): Path of the file to search.
+            Example: "/home/user/documents/log.txt" or "C:\\Users\\user\\Documents\\log.txt"
+        search_string (str, REQUIRED): String to search for, cannot be empty.
+            Example: "error" or "WARNING" or "function_name"
+        case_sensitive (bool, OPTIONAL): Whether to distinguish case. Defaults to True (case-sensitive).
+            Example: True (case-sensitive) or False (case-insensitive)
 
     Returns:
-        List[Dict[str, Union[int, str]]]: 匹配行的列表，每个元素为一个字典，包含：
-            - line_number (int): 行号（从1开始）
-            - content (str): 移除行尾换行符后的行内容
-            - original_content (str): 原始行内容（保留换行符）
+        List[Dict[str, Union[int, str]]]: List of matching lines, each element is a dictionary containing:
+            - line_number (int): Line number (starting from 1)
+            - content (str): Line content with trailing newline removed
+            - original_content (str): Original line content (preserves newline character)
 
     Raises:
-        ValueError: 当文件路径为空或搜索字符串为空时。
-        FileNotFoundError: 当文件不存在时。
-        ValueError: 当路径不是文件时。
-        UnicodeDecodeError: 当文件无法用UTF-8或GBK解码时。
-        IOError: 当文件读取失败时。
+        ValueError: When the file path is empty or the search string is empty.
+        FileNotFoundError: When the file does not exist.
+        ValueError: When the path is not a file.
+        UnicodeDecodeError: When the file cannot be decoded with UTF-8 or GBK.
+        IOError: When file reading fails.
+
+    Example:
+        find_lines_in_file("/home/user/log.txt", "error", False)
+        Returns: [
+            {"line_number": 5, "content": "Error: Connection failed", "original_content": "Error: Connection failed\\n"},
+            {"line_number": 12, "content": "Critical error in module", "original_content": "Critical error in module\\n"}
+        ]
     """
     if not file_path or not file_path.strip():
         raise ValueError("文件路径不能为空")

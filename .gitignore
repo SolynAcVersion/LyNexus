@@ -10,7 +10,7 @@ chathistory/
 /.vscode/
 /.claude/
 /conversations/
-
+/data/
 # Virtual environments
 .venv
 

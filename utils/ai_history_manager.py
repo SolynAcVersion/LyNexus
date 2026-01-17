@@ -2,6 +2,7 @@
 """
 AI Conversation History Manager - Independent from chat display history
 Manages AI's conversation context, saves only valid conversations and command execution results
+Now integrates with ChatDataManager for individual chat folders
 """
 
 import os
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import List, Dict, Optional
 
 from config.i18n import i18n
+from utils.chat_data_manager import ChatDataManager
 
 
 class AIHistoryManager:
@@ -44,6 +46,7 @@ class AIHistoryManager:
     def __init__(self, ai_conv_dir: str = "ai_conv"):
         self.ai_conv_dir = Path(ai_conv_dir)
         self.ai_conv_dir.mkdir(exist_ok=True, parents=True)
+        self.chat_data_manager = ChatDataManager()
     
     def get_history_file(self, conversation_name: str) -> Path:
         """Get conversation history file path"""
@@ -73,8 +76,16 @@ class AIHistoryManager:
 
     def load_history(self, conversation_name: str, system_prompt: str = None) -> List[Dict]:
         """Load AI conversation history"""
-        history_file = self.get_history_file(conversation_name)
+        # Try new ChatDataManager first
+        loaded_history = self.chat_data_manager.load_ai_history(conversation_name)
+        if loaded_history is not None:
+            print(f"[AIHistory] Loaded {len(loaded_history)} messages from ChatDataManager")
 
+            # Ensure system prompt is at the beginning
+            return self._ensure_system_prompt(loaded_history, system_prompt)
+
+        # Fall back to old method for backward compatibility
+        history_file = self.get_history_file(conversation_name)
         loaded_history = []
 
         if history_file.exists():
@@ -86,6 +97,10 @@ class AIHistoryManager:
                 print(f"[AIHistory] Failed to load history: {e}")
 
         # Ensure system prompt is at the beginning
+        return self._ensure_system_prompt(loaded_history, system_prompt)
+
+    def _ensure_system_prompt(self, loaded_history: List[Dict], system_prompt: str = None) -> List[Dict]:
+        """Ensure system prompt is at the beginning of history"""
         if system_prompt:
             # 移除所有现有的 system 消息
             filtered_history = [msg for msg in loaded_history if msg.get("role") != "system"]
@@ -113,8 +128,14 @@ class AIHistoryManager:
     
     def save_history(self, conversation_name: str, history: List[Dict]):
         """Save AI conversation history"""
+        # Save using new ChatDataManager
+        success = self.chat_data_manager.save_ai_history(conversation_name, history)
+        if success:
+            print(f"[AIHistory] Saved {len(history)} messages to ChatDataManager")
+
+        # Also save to old location for backward compatibility
         history_file = self.get_history_file(conversation_name)
-        
+
         try:
             with open(history_file, 'w', encoding='utf-8') as f:
                 json.dump(history, f, ensure_ascii=False, indent=2)
@@ -149,6 +170,9 @@ class AIHistoryManager:
 
     def delete_history(self, conversation_name: str):
         """Delete conversation history file"""
+        # Delete from ChatDataManager (this deletes entire chat folder)
+        # Note: We don't do this here as it should be called from a higher level
+        # Just delete the old location for now
         history_file = self.get_history_file(conversation_name)
 
         if history_file.exists():

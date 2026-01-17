@@ -1,4 +1,4 @@
-# 改编自 https://github.com/hiroi-sora/Umi-OCR/blob/main/docs/http/api_doc.md#/api/doc
+# Adapted from https://github.com/hiroi-sora/Umi-OCR/blob/main/docs/http/api_doc.md#/api/doc
 
 import base64
 import os
@@ -9,23 +9,34 @@ from urllib.request import urlopen
 
 def ocr_process_pdf(file_path: str, download_dir: str):
     """
-    将本地pdf文件识别文本，输出到指定目录并返回文件相对地址
-    
+    Perform OCR text recognition on a local PDF file, output to the specified directory, and return the file path.
+
     Args:
-        file_path: 要上传的pdf 地址，必须是pdf文件！
-        
-        download_dir: 本地保存目录路径，不包括文件名，只是下载到的目录
-        
-        如果有“\\”符号，必须使用转义符号！！！
-        "C:\\Users\\admin\\Desktop\\new.pdf"是正确的
-        
+        file_path (str, REQUIRED): Path to the PDF file to upload. Must be a PDF file.
+            Example: "/home/user/documents/report.pdf" or "C:\\Users\\user\\Documents\\report.pdf"
+            Note: If using Windows paths with backslashes, you must escape them: "C:\\\\Users\\\\user\\\\file.pdf"
+
+        download_dir (str, REQUIRED): Local directory path to save the output. This is only the directory path, not including the filename.
+            Example: "/home/user/downloads" or "C:\\Users\\user\\Downloads"
+            Note: Directory will be created if it does not exist.
+
     Returns:
-        str: 下载成功的文件保存路径，包括文件名和拓展名，是相对路径。
-        
+        str: The absolute path where the successfully downloaded file is saved, including filename and extension.
+
     Raises:
-        Exception: 服务器连接失败
+        Exception: When server connection fails or Umi-OCR is not running.
+        FileNotFoundError: When the source PDF file does not exist.
+        AssertionError: When the OCR task fails or returns an error code.
+
+    Example:
+        ocr_process_pdf("/home/user/documents/report.pdf", "/home/user/ocr_output")
+        Returns: "/home/user/ocr_output/report.txt"
+
+    Prerequisites:
+        - Umi-OCR must be running on http://127.0.0.1:1224
+        - Run the executable: .\\tools\\addition\\Umi-OCR\\Umi-OCR.exe
     """
-    
+
     base_url = "http://127.0.0.1:1224"
     try:
         resp = urlopen(base_url)
@@ -34,13 +45,13 @@ def ocr_process_pdf(file_path: str, download_dir: str):
             raise Exception(f"no Umi-OCR running or port not correct! run .\\tools\\addition\\Umi-OCR\\Umi-OCR.exe")
     except Exception as e:
         raise Exception(f'访问本地 Umi-OCR 失败: {str(e)}')
-    
+
 
     url = "{}/api/doc/upload".format(base_url)
 
     if not file_path.endswith(".pdf"):
         file_path += '.pdf'
-    
+
     # Task parameters
     options_json = json.dumps(
         {
@@ -144,28 +155,55 @@ def ocr_process_pdf(file_path: str, download_dir: str):
     return download_path
 
 
-    
+
 def ocr_process_pictures(file_path: str):
-    
+
     """
-    将本地图片文件识别文本，输出识别到的内容
-    
+    Perform OCR text recognition on a local image file and return the recognized content.
+
     Args:
-        file_path: 要上传的图像文件目录       
-        
-        如果有“\\”符号，必须使用转义符号！！！
-        "C:\\Users\\admin\\Desktop\\new.png"是正确的
-        
+        file_path (str, REQUIRED): Path to the image file to process.
+            Example: "/home/user/pictures/screenshot.png" or "C:\\Users\\user\\Pictures\\scan.jpg"
+            Note: If using Windows paths with backslashes, you must escape them: "C:\\\\Users\\\\user\\\\image.png"
+            Supported formats: PNG, JPG, JPEG, BMP, etc.
+
     Returns:
-        str: 识别出来的内容
-        由多个小json组成，每个json中的参数有：
-        text	string	文本
-        score	double	置信度 (0~1)
-        box	    list	文本框顺时针四个角的xy坐标：[左上,右上,右下,左下]
-        end	    string	表示本行文字结尾的结束符，根据排版解析得出。可能为空、空格 、换行\\n。
-        将所有OCR文本块拼接为完整段落时，按照 本行文字+本行结束符+下一行文字+下一行结束符+……的形式，就能恢复段落结构。
+        list: A list of OCR result dictionaries. Each dictionary contains:
+            - text (str): Recognized text content
+            - score (float): Confidence score (0~1)
+            - box (list): XY coordinates of four corners of the text box in clockwise order: [top-left, top-right, bottom-right, bottom-left]
+            - end (str): End character for this line of text based on layout analysis. May be empty, space " ", or newline "\\n"
+
+            To reconstruct complete paragraphs from OCR text blocks, concatenate in the format:
+            current_line_text + current_line_end + next_line_text + next_line_end + ...
+
+    Raises:
+        FileNotFoundError: When the image file does not exist.
+        Exception: When Umi-OCR server connection fails or returns an error.
+        ValueError: When the image format is not supported.
+
+    Example:
+        ocr_process_pictures("/home/user/images/receipt.png")
+        Returns: [
+            {
+                "text": "Total: $25.99",
+                "score": 0.98,
+                "box": [[100, 200], [300, 200], [300, 220], [100, 220]],
+                "end": "\\n"
+            },
+            {
+                "text": "Thank you for shopping",
+                "score": 0.95,
+                "box": [[100, 230], [350, 230], [350, 250], [100, 250]],
+                "end": ""
+            }
+        ]
+
+    Prerequisites:
+        - Umi-OCR must be running on http://127.0.0.1:1224
+        - Run the executable: .\\tools\\addition\\Umi-OCR\\Umi-OCR.exe
     """
-    
+
     with open(file_path,'rb') as f:
         image_base64 = base64.b64encode(f.read())
         _, image_base64, _ = str(image_base64).split('\'')
@@ -182,6 +220,6 @@ def ocr_process_pictures(file_path: str):
     response.raise_for_status()
     res_dict = json.loads(response.text)
     return res_dict["data"]
-    
+
 # if __name__ == "__main__":
 #     ocr_process_pictures("C:\\Users\\2300\\Desktop\\mcpPro\\DeepseekDesktop\\tools\\addition\\Umi-OCR\\test.png")

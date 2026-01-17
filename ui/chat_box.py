@@ -37,6 +37,7 @@ from PySide6.QtCore import (
 from config.i18n import i18n
 from utils.config_manager import ConfigManager
 from utils.ai_history_manager import AIHistoryManager
+from utils.chat_data_manager import ChatDataManager
 from utils.markdown_renderer import MarkdownRenderer, RenderMode, get_renderer
 from ui.init_dialog import InitDialog
 from ui.settings_dialog import SettingsDialog
@@ -1029,6 +1030,7 @@ class ModernChatBox(QWidget):
         # Core managers
         self.config_manager = ConfigManager()
         self.history_manager = AIHistoryManager()
+        self.chat_data_manager = ChatDataManager()
         self.context_manager = ConversationContextManager(self.config_manager)
         self.message_processor = MessageProcessor(self.context_manager, self.history_manager)
         self.streaming_processor = StreamingProcessor(self)
@@ -1380,6 +1382,10 @@ class ModernChatBox(QWidget):
         self.input_text = QTextEdit()
         self.input_text.setPlaceholderText(i18n.tr("type_message"))
         self.input_text.setAcceptRichText(False)
+        # Enable drag and drop
+        self.input_text.setAcceptDrops(True)
+        self.input_text.dragEnterEvent = self.input_drag_enter_event
+        self.input_text.dropEvent = self.input_drop_event
         self.input_text.setStyleSheet("""
             QTextEdit {
                 background-color: #2D2D2D;
@@ -2144,6 +2150,9 @@ class ModernChatBox(QWidget):
             # Clear AI history
             self.history_manager.delete_history(deleted_conversation)
 
+            # Delete chat folder and all its contents
+            self.chat_data_manager.delete_chat_folder(deleted_conversation)
+
             # Save updated config
             self.config_manager.save_chat_history(self.chat_records)
             self.config_manager.save_chat_list(self.chat_list_names)
@@ -2669,6 +2678,38 @@ class ModernChatBox(QWidget):
             self._show_tools_list()
         else:
             super().keyPressEvent(event)
+
+    def input_drag_enter_event(self, event):
+        """Handle drag enter event for input text box"""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def input_drop_event(self, event):
+        """Handle drop event for input text box - insert file paths"""
+        if event.mimeData().hasUrls():
+            files = [u.toLocalFile() for u in event.mimeData().urls()]
+            # Get current text and cursor position
+            current_text = self.input_text.toPlainText()
+
+            # Insert file paths at the beginning of the text
+            file_paths = ' '.join(f'"{f}"' for f in files if os.path.exists(f))
+            if file_paths:
+                # Insert at the beginning with a trailing space
+                new_text = file_paths + ' ' + current_text
+                self.input_text.setPlainText(new_text)
+
+                # Move cursor to position after the file paths and space
+                cursor = self.input_text.textCursor()
+                cursor.setPosition(len(file_paths) + 1)
+                self.input_text.setTextCursor(cursor)
+                # Ensure focus is on the input text
+                self.input_text.setFocus()
+
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
 
 # ============================================================================
