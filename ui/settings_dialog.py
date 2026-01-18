@@ -339,50 +339,50 @@ class SettingsDialog(QWidget):
         """Load settings from existing AI instance."""
         if not self.ai:
             return
-        
+
         try:
             # Get configuration from AI instance
             config = getattr(self.ai, 'get_config', lambda: {})()
-            
-            # Store MCP paths
+
+            # Store MCP paths from AI config (from settings.json)
             self.mcp_paths = config.get('mcp_paths', [])
-            
+
             # API settings
             self.api_base_edit.setText(config.get('api_base', 'https://api.deepseek.com'))
             self.model_edit.setText(config.get('model', 'deepseek-chat'))
-            
+
             # Load API key from .confignore
             api_key = self.config_manager.load_api_key()
             if api_key:
                 self.api_key_edit.setText(api_key)
             elif hasattr(self.ai, 'api_key'):
                 self.api_key_edit.setText(getattr(self.ai, 'api_key', ''))
-            
+
             # Model parameters - handle None values safely
             self.temp_spin.setValue(config.get('temperature', 1.0))
             self.stream_check.setChecked(config.get('stream', True))  # 默认启用streaming
-            
+
             max_tokens = config.get('max_tokens')
             if max_tokens is None:
                 self.max_tokens_spin.setValue(0)  # 0 means no limit
             else:
                 self.max_tokens_spin.setValue(max_tokens)
-            
+
             self.top_p_spin.setValue(config.get('top_p', 1.0))
             self.presence_spin.setValue(config.get('presence_penalty', 0.0))
             self.frequency_spin.setValue(config.get('frequency_penalty', 0.0))
-            
+
             # Command settings
             self.cmd_start_edit.setText(config.get('command_start', 'YLDEXECUTE:'))
             self.cmd_separator_edit.setText(config.get('command_separator', '￥|'))
             self.max_iter_spin.setValue(config.get('max_iterations', 15))
-            
+
             # System prompt
             self.prompt_edit.setText(config.get('system_prompt', ''))
-            
+
             # MCP files display
             self.update_mcp_files_display()
-            
+
         except Exception as e:
             print(f"Error loading current settings: {e}")
             QMessageBox.warning(self, "Load Error", f"Failed to load current settings: {e}")
@@ -469,29 +469,34 @@ class SettingsDialog(QWidget):
     def add_mcp_files(self):
         """Add additional MCP files to the configuration."""
         file_dialog = QFileDialog(self)
-        file_dialog.setWindowTitle("Add MCP Files")
+        file_dialog.setWindowTitle("Add MCP Tools")
         file_dialog.setFileMode(QFileDialog.ExistingFile)
         selected_files, _ = file_dialog.getOpenFileNames(
-            self, "Select MCP Files", "",
-            "All Supported (*.py *.json *.yaml *.yml);;"
-            "Python Files (*.py);;"
-            "JSON Files (*.json);;"
-            "YAML Files (*.yaml *.yml)"
+            self, "Select MCP Files (Python or JSON)", "",
+            "All Supported (*.py *.json);;Python Files (*.py);;JSON Config Files (*.json);;All Files (*)"
         )
 
         if selected_files:
-            # Create chat folder if it doesn't exist
-            if not self.chat_data_manager.chat_exists(self.conversation_name):
-                self.chat_data_manager.create_chat_folder(self.conversation_name)
+            # Copy MCP files to chat folder and record relative paths
+            for file_path in selected_files:
+                # 只处理 .py 和 .json 文件
+                if not (file_path.endswith('.py') or file_path.endswith('.json')):
+                    print(f"[SettingsDialog] Skipped unsupported file: {file_path}")
+                    continue
 
-            # Copy MCP files to chat folder and get absolute paths
-            for file in selected_files:
-                copied_path = self.chat_data_manager.copy_mcp_tool_to_chat(self.conversation_name, file)
-                if copied_path and copied_path not in self.mcp_paths:
-                    self.mcp_paths.append(copied_path)
-                elif file not in self.mcp_paths:
-                    # If copy failed, still add original path
-                    self.mcp_paths.append(file)
+                # Copy file and get relative path
+                relative_path = self.chat_data_manager.copy_mcp_tool_to_chat(
+                    self.conversation_name, file_path
+                )
+
+                if relative_path:
+                    # Add to mcp_paths list for display and saving
+                    if relative_path not in self.mcp_paths:
+                        self.mcp_paths.append(relative_path)
+
+                    print(f"[SettingsDialog] Added MCP tool: {relative_path}")
+                else:
+                    print(f"[SettingsDialog] Failed to copy MCP tool: {file_path}")
 
             # Update display
             self.update_mcp_files_display()
@@ -508,7 +513,7 @@ class SettingsDialog(QWidget):
                 'api_key': self.api_key_edit.text().strip(),
                 'api_base': self.api_base_edit.text().strip(),
                 'model': self.model_edit.text().strip(),
-                
+
                 # Model parameters
                 'temperature': self.temp_spin.value(),
                 'max_tokens': self.max_tokens_spin.value() if self.max_tokens_spin.value() > 0 else None,
@@ -516,42 +521,42 @@ class SettingsDialog(QWidget):
                 'presence_penalty': self.presence_spin.value(),
                 'frequency_penalty': self.frequency_spin.value(),
                 'stream': self.stream_check.isChecked(),
-                
+
                 # Command settings
                 'command_start': self.cmd_start_edit.text().strip(),
                 'command_separator': self.cmd_separator_edit.text().strip(),
                 'max_iterations': self.max_iter_spin.value(),
-                
+
                 # System prompt
                 'system_prompt': self.prompt_edit.toPlainText().strip(),
-                
-                # MCP paths
+
+                # MCP paths - 保存相对路径
                 'mcp_paths': self.mcp_paths
             }
-            
+
             # Validate required fields
             if not settings['api_base']:
                 QMessageBox.warning(self, "Validation Error", "API Base URL is required")
                 return
-            
+
             if not settings['model']:
                 QMessageBox.warning(self, "Validation Error", "Model name is required")
                 return
-            
+
             # Save API key to .confignore if provided
             if settings['api_key']:
                 self.config_manager.save_api_key(settings['api_key'])
-            
+
             # Save conversation-specific configuration
             if self.conversation_name:
                 self.config_manager.save_conversation_config(self.conversation_name, settings)
-            
+
             # Emit settings for the parent to update the existing AI instance
             self.sig_save_settings.emit(settings)
-            
+
             # Close dialog
             self.close()
-            
+
         except Exception as e:
             QMessageBox.warning(self, "Save Error", f"Failed to save settings: {e}")
     

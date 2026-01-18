@@ -41,6 +41,7 @@ from utils.chat_data_manager import ChatDataManager
 from utils.markdown_renderer import MarkdownRenderer, RenderMode, get_renderer
 from ui.init_dialog import InitDialog
 from ui.settings_dialog import SettingsDialog
+from ui.mcp_tools_widget import MCPToolsWidget
 from aiclass import AI
 
 
@@ -133,24 +134,46 @@ class ConversationConfig:
 
     # Customizable prompts for command execution flow
     command_execution_prompt: str = (
-        "Execution result: {result}\n\n"
-        "IMPORTANT: This result is from the tool execution. The user CANNOT see this result - only your response will be shown to the user.\n\n"
-        "You must process this result and provide your actual answer/output to the user. Do NOT consider the task complete "
-        "just because a tool was executed. The task is only complete when you have provided the user with the actual "
-        "information or output they requested.\n\n"
-        "Continue processing if needed, or provide your final answer if you have completed what the user asked for."
+        "The command has been executed. Result:\n\n"
+        "{result}\n\n"
+        "【DECISION REQUIRED】\n"
+        "Choose ONE:\n"
+        "1. Output another YLDEXECUTE: line - if you need more information\n"
+        "2. Provide analysis/answer - if you have sufficient information\n\n"
+        "【RULES】\n"
+        "- Do NOT display raw output\n"
+        "- If continuing: output ONLY YLDEXECUTE: line\n"
+        "- If done: provide direct answer using Markdown"
     )
 
     command_retry_prompt: str = (
-        "Execution failed: {error}\n\n"
-        "Please analyze the error and retry with a corrected command, or provide an alternative solution."
+        "【COMMAND EXECUTION FAILED】\n"
+        "Error: {error}\n\n"
+        "【REQUIRED ACTIONS】\n"
+        "1. Check the error message above\n"
+        "2. Output ONE YLDEXECUTE: instruction with:\n"
+        "   - Corrected command syntax, OR\n"
+        "   - Alternative tool/command that achieves the same goal\n\n"
+        "【CHECKLIST】\n"
+        "- Does the tool/command exist in the available tools list?\n"
+        "- Are parameters in correct format?\n"
+        "- Are file paths correct?\n"
+        "- Is there an alternative approach?\n\n"
+        "Output ONLY the next YLDEXECUTE: line. Do not provide explanations."
     )
 
     final_summary_prompt: str = (
-        "Based on the CURRENT execution result ONLY, please provide a FINAL SUMMARY in Chinese of what was found or accomplished in THIS operation. "
-        "This is the FINAL request - after this summary, do NOT execute any more commands. "
-        "IMPORTANT: Do NOT include summaries of previous operations or entire conversation. "
-        "Focus ONLY on the most recent result. Just provide the summary and stop."
+        "【FINAL SUMMARY REQUIRED】\n\n"
+        "Provide a summary of completed work:\n\n"
+        "1. What was the user's request?\n"
+        "2. What did you accomplish?\n"
+        "3. What are the key results?\n\n"
+        "【FORMAT】\n"
+        "- Use Markdown (headings, bullet points, code blocks)\n"
+        "- Do NOT show raw command output\n"
+        "- Explain in clear language\n"
+        "- If incomplete, state what remains\n\n"
+        "Output ONLY the summary. No more commands."
     )
 
     max_execution_iterations: int = 3  # Maximum iterations before forcing summary
@@ -181,6 +204,7 @@ class ProcessingState(Enum):
     EXECUTING_COMMAND = auto()
     AWAITING_SUMMARY = auto()
     ERROR = auto()
+    LOADING = auto()  # Loading conversation
 
 
 class BubbleType(Enum):
@@ -249,16 +273,17 @@ class ConversationContextManager:
         """Get or create AI instance for conversation"""
         if conversation_name in self.conversation_ais:
             return self.conversation_ais[conversation_name]
-        
+
         try:
             config = self.load_conversation_config(conversation_name)
             if not config.api_key:
                 return None
-            
-            ai_instance = self.create_ai_instance(config)
+
+            # Pass conversation_name to create_ai_instance
+            ai_instance = self.create_ai_instance(config, conversation_name)
             self.conversation_ais[conversation_name] = ai_instance
             return ai_instance
-            
+
         except Exception as e:
             print(f"[ContextManager] Failed to create AI instance: {e}")
             return None
@@ -317,7 +342,7 @@ class ConversationContextManager:
         self.conversation_configs[conversation_name] = config
         return config
     
-    def create_ai_instance(self, config: ConversationConfig) -> AI:
+    def create_ai_instance(self, config: ConversationConfig, conversation_name: str = None) -> AI:
         """Create AI instance from configuration"""
         ai_kwargs = {
             'api_key': config.api_key,
@@ -336,7 +361,9 @@ class ConversationContextManager:
             'command_execution_prompt': config.command_execution_prompt,
             'command_retry_prompt': config.command_retry_prompt,
             'final_summary_prompt': config.final_summary_prompt,
-            'max_execution_iterations': config.max_execution_iterations
+            'max_execution_iterations': config.max_execution_iterations,
+            # CRITICAL: Pass chat_name
+            'chat_name': conversation_name or 'default'
         }
 
         # Remove None values
@@ -442,12 +469,34 @@ class MessageProcessor:
                 if hasattr(response, '__iter__'):
                     for _ in response:
                         pass
-                
-                result['success'] = True
+
+                # Check if there were any errors in the response
+                full_response_lower = result['full_response'].lower()
+                # Check for common error patterns
+                error_patterns = [
+                    'function does not exist',
+                    'execution failed',
+                    'error:',
+                    'failed to',
+                    'command execution error'
+                ]
+
+                has_error = any(pattern in full_response_lower for pattern in error_patterns)
+
+                # Success if no errors found
+                result['success'] = not has_error
                 result['contains_command'] = self._check_for_command(
-                    result['full_response'], 
+                    result['full_response'],
                     context.ai_instance
                 )
+
+                # If there was an error, add it to the result
+                if has_error:
+                    # Extract error message if possible
+                    error_lines = [line for line in result['full_response'].split('\n')
+                                 if any(pattern in line.lower() for pattern in error_patterns)]
+                    if error_lines:
+                        result['error'] = error_lines[0].strip()
                 
             else:
                 # Fallback to non-streaming
@@ -692,9 +741,10 @@ class StreamingProcessor:
                 # Return the full response from streaming
                 # The AI class has already handled commands and provided final output
                 return {
-                    'success': True,
+                    'success': result.get('success', True),
                     'response': result.get('full_response', ''),
-                    'command_executed': False  # AI handled it internally
+                    'command_executed': result.get('contains_command', False),  # Reflect actual command execution
+                    'error': result.get('error')  # Include error if any
                 }
 
         except Exception as e:
@@ -1349,7 +1399,8 @@ class ModernChatBox(QWidget):
             (i18n.tr("initialize"), self._show_init_dialog, "#2A7CDD"),
             (i18n.tr("tools"), self._show_tools_list, "#3A3A3A"),
             (i18n.tr("export_chat"), self._export_chat_history, "#3A3A3A"),
-            (i18n.tr("clear_chat"), self._clear_current_chat, "#D32F2F")
+            (i18n.tr("delete_chat"), self._delete_current_chat, "#D32F2F"),
+            (i18n.tr("clear_chat"), self._clear_current_chat, "#666666")
         ]
         
         for text, callback, color in actions:
@@ -1480,29 +1531,6 @@ class ModernChatBox(QWidget):
         
         # Button layout
         button_layout = QHBoxLayout()
-
-        # Delete chat button
-        self.delete_chat_button = QPushButton(i18n.tr("delete_chat"))
-        self.delete_chat_button.setFixedHeight(40)
-        self.delete_chat_button.setStyleSheet("""
-            QPushButton {
-                background-color: #666666;
-                color: white;
-                border: none;
-                border-radius: 8px;
-                font-size: 13px;
-                font-weight: 500;
-                padding: 0 20px;
-            }
-            QPushButton:hover { background-color: #777777; }
-            QPushButton:pressed { background-color: #555555; }
-            QPushButton:disabled {
-                background-color: #444444;
-                color: #888888;
-            }
-        """)
-        self.delete_chat_button.clicked.connect(self._delete_current_chat)
-        button_layout.addWidget(self.delete_chat_button)
 
         button_layout.addStretch()
 
@@ -2015,8 +2043,6 @@ class ModernChatBox(QWidget):
                 # If this chunk contains a command marker
                 if cmd_start in chunk:
                     print(f"[ChatBox] Command detected in stream chunk: {chunk[:50]}...")
-                    # Enter command mode - stop displaying
-                    self._in_command_mode = True
 
                     # Save any content that was shown before the command
                     if self.current_stream_bubble:
@@ -2038,17 +2064,75 @@ class ModernChatBox(QWidget):
                         self.current_stream_bubble = None
                         self._accumulated_before_command = ""
 
-                    # Don't display command content
+                    # Enter command mode - stop displaying
+                    self._in_command_mode = True
+
+                    # 创建命令气泡显示命令本身
+                    # 提取命令文本 - 可能包含多个命令行
+                    command_lines = chunk.split('\n')
+                    command_text = command_lines[0] if command_lines else chunk
+
+                    # 创建命令气泡
+                    command_bubble = self._add_message_to_display(
+                        message=command_text,
+                        bubble_type=BubbleType.COMMAND_REQUEST
+                    )
+                    self.last_command_bubble = command_bubble
+                    print(f"[ChatBox] Created command bubble for: {command_text}")
+
+                    # If there are more lines with commands, create additional bubbles
+                    for i, line in enumerate(command_lines[1:], 1):
+                        line = line.strip()
+                        if line and (cmd_start in line or line.startswith('￥|')):
+                            # This is another command
+                            additional_bubble = self._add_message_to_display(
+                                message=line,
+                                bubble_type=BubbleType.COMMAND_REQUEST
+                            )
+                            print(f"[ChatBox] Created additional command bubble {i}: {line}")
+
+                    # Don't display command content beyond the bubble
                     return
 
                 # If we're in command mode, check if this is the start of real content
                 if self._in_command_mode:
-                    # Look for indicators that we're now getting real content (not command output)
-                    # Real content typically starts with text after newlines, not command syntax
-                    chunk_clean = chunk.strip()
+                    # CRITICAL: Check if this is ANOTHER command (multi-command scenario)
+                    if cmd_start in chunk:
+                        print(f"[ChatBox] ANOTHER command detected while in command mode: {chunk[:50]}...")
+                        # Exit command mode temporarily to handle new command
+                        self._in_command_mode = False
+                        # Let the code above handle this new command
+                        # Continue to the command detection logic below
+                    else:
+                        # Look for indicators that we're now getting real content (not command output)
+                        # Real content typically starts with text after newlines, not command syntax
+                        chunk_clean = chunk.strip()
 
-                    # Skip empty chunks or chunks that look like continuation of command
-                    if not chunk_clean:
+                        # Skip empty chunks or chunks that look like continuation of command
+                        if not chunk_clean:
+                            return
+
+                    # Check if this is an error message
+                    is_error = (
+                        '错误' in chunk_clean or
+                        'error' in chunk_clean.lower() or
+                        'Error' in chunk_clean or
+                        'failed' in chunk_clean.lower() or
+                        'Failed' in chunk_clean or
+                        chunk_clean.startswith('**错误**')
+                    )
+
+                    if is_error:
+                        print(f"[ChatBox] Error detected in command execution: {chunk_clean[:50]}...")
+                        # 创建错误气泡
+                        error_bubble = self._add_message_to_display(
+                            message=chunk_clean,
+                            bubble_type=BubbleType.ERROR
+                        )
+                        self._in_command_mode = False
+                        self.current_stream_bubble = None
+                        QApplication.processEvents()
+                        self._scroll_to_bottom()
                         return
 
                     # If we see actual content (not just special characters or command artifacts),
@@ -2356,7 +2440,8 @@ class ModernChatBox(QWidget):
                 ProcessingState.STREAMING: " | Streaming",
                 ProcessingState.EXECUTING_COMMAND: " | Executing Command",
                 ProcessingState.AWAITING_SUMMARY: " | Awaiting Summary",
-                ProcessingState.ERROR: " | Error"
+                ProcessingState.ERROR: " | Error",
+                ProcessingState.LOADING: " | Loading..."
             }.get(self.current_state, "")
             
             status_text = f"Lynexus AI | {model_name} | {tools_count} tools | {streaming_status}{state_text}"
@@ -2391,6 +2476,10 @@ class ModernChatBox(QWidget):
         print(f"[ModernChatBox] Switching to: {conversation_name}")
 
         try:
+            # Set loading state
+            self.current_state = ProcessingState.LOADING
+            self._update_status_bar()
+
             # Set as current item in QListWidget for visual selection
             self.chat_list.setCurrentItem(item)
 
@@ -2407,18 +2496,21 @@ class ModernChatBox(QWidget):
 
             # Load AI for conversation
             self.context_manager.get_ai_for_conversation(conversation_name)
-            
+
             # Load messages
             self._load_conversation_messages(conversation_name)
-            
+
             # Update status
+            self.current_state = ProcessingState.IDLE
             self._update_status_bar()
-            
+
             # Scroll to bottom
             QTimer.singleShot(100, self._scroll_to_bottom)
-            
+
         except Exception as e:
             print(f"[ModernChatBox] Switch error: {e}")
+            self.current_state = ProcessingState.IDLE
+            self._update_status_bar()
             QMessageBox.warning(self, "Switch Error", f"Error: {e}")
     
     def _load_conversation_messages(self, conversation_name: str):
@@ -2541,20 +2633,71 @@ class ModernChatBox(QWidget):
     def _handle_settings_save(self, settings: dict):
         """Handle settings save"""
         if self.current_conversation:
+            # Show loading status
+            self.current_state = ProcessingState.LOADING
+            self._update_status_bar()
+
             # Save configuration
             self.config_manager.save_conversation_config(self.current_conversation, settings)
-            
-            # Update AI configuration
-            ai_instance = self.context_manager.get_ai_for_conversation(self.current_conversation)
-            if ai_instance:
-                ai_instance.update_config(settings)
-            
-            # Clear and reload AI
-            self.context_manager.clear_conversation(self.current_conversation)
-            self.context_manager.get_ai_for_conversation(self.current_conversation)
-            
-            self._update_status_bar()
-            QMessageBox.information(self, "Success", f"Settings updated for {self.current_conversation}")
+
+            # Update AI configuration asynchronously
+            from PySide6.QtCore import QThreadPool, QRunnable
+
+            class ReloadAITask(QRunnable):
+                def __init__(self, chat_box, conversation_name, settings):
+                    super().__init__()  # 调用父类初始化
+                    self.chat_box = chat_box
+                    self.conversation_name = conversation_name
+                    self.settings = settings
+
+                def run(self):
+                    try:
+                        # Clear and reload AI
+                        self.chat_box.context_manager.clear_conversation(self.conversation_name)
+                        ai_instance = self.chat_box.context_manager.get_ai_for_conversation(self.conversation_name)
+
+                        if ai_instance:
+                            # 更新基本配置
+                            print(f"[AsyncReload] Updating AI config...")
+                            ai_instance.update_config(self.settings)
+
+                            # 清除缓存并重新创建 AI 实例
+                            print("[AsyncReload] Clearing conversation cache and recreating AI instance...")
+                            self.chat_box.context_manager.clear_conversation(self.conversation_name)
+                            ai_instance = self.chat_box.context_manager.get_ai_for_conversation(self.conversation_name)
+
+                            print(f"[AsyncReload] New AI instance created with {len(ai_instance.enabled_mcp_tools)} tools")
+
+                            # 在主线程中执行 UI 更新
+                            QMetaObject.invokeMethod(
+                                self.chat_box,
+                                "_on_mcp_load_complete",
+                                Qt.QueuedConnection,
+                                Q_ARG(str, self.conversation_name)
+                            )
+
+                    except Exception as e:
+                        print(f"[Error] Failed to reload AI: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+                        # 即使失败也要通知完成
+                        QMetaObject.invokeMethod(
+                            self.chat_box,
+                            "_on_mcp_load_complete",
+                            Qt.QueuedConnection,
+                            Q_ARG(str, self.conversation_name)
+                        )
+
+            # Run in background
+            QThreadPool.globalInstance().start(ReloadAITask(self, self.current_conversation, settings))
+
+    @Slot(str)
+    def _on_mcp_load_complete(self, conversation_name: str):
+        """MCP tools load complete callback"""
+        self.current_state = ProcessingState.IDLE
+        self._update_status_bar()
+        QMessageBox.information(self, "Success", f"Settings updated for {conversation_name}")
     
     def _import_config_file(self):
         """Import configuration file"""
@@ -2716,33 +2859,54 @@ class ModernChatBox(QWidget):
         self._update_status_bar()
     
     def _show_tools_list(self):
-        """Show tools list"""
+        """Show MCP tools selection dialog"""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QPushButton
+
         ai_instance = self.context_manager.get_ai_for_conversation(self.current_conversation)
-        
-        if ai_instance:
-            tools = ai_instance.get_available_tools()
-            if tools:
-                tools_text = "**Available Tools**\n\n"
-                for i, tool in enumerate(tools, 1):
-                    desc = tool.get('description', 'No description')
-                    if len(desc) > 100:
-                        desc = desc[:100] + "..."
-                    tools_text += f"**{i}. {tool.get('name', 'Unnamed')}**\n   {desc}\n\n"
-                
-                msg_box = QMessageBox(self)
-                msg_box.setWindowTitle("Available Tools")
-                msg_box.setText(tools_text)
-                msg_box.setStyleSheet("""
-                    QLabel { 
-                        color: #E0E0E0; 
-                        min-width: 400px; 
-                        font-size: 12px; 
-                        line-height: 1.4;
-                    }
-                """)
-                msg_box.exec()
-            else:
-                QMessageBox.information(self, "Tools", "No tools available. Add MCP files in Settings.")
+
+        if not ai_instance:
+            QMessageBox.information(self, "Tools", "No AI instance available.")
+            return
+
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("MCP Tools")
+        dialog.setMinimumSize(500, 600)
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #1E1E1E;
+            }
+        """)
+
+        # Create layout
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        # Create MCP tools widget
+        tools_widget = MCPToolsWidget(ai_instance)
+        layout.addWidget(tools_widget)
+
+        # Add close button
+        close_button = QPushButton("Close")
+        close_button.setFixedHeight(40)
+        close_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4A9CFF;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 500;
+                padding: 0 24px;
+            }
+            QPushButton:hover { background-color: #5AACFF; }
+            QPushButton:pressed { background-color: #3A8CEE; }
+        """)
+        close_button.clicked.connect(dialog.accept)
+        layout.addWidget(close_button)
+
+        # Show dialog
+        dialog.exec()
     
     # ============================================================================
     # EVENT HANDLERS

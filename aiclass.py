@@ -31,6 +31,9 @@ class AI:
                 api_base=None,
                 model=None,
 
+                # 会话名称 (用于加载独立配置)
+                chat_name=None,
+
                 # 系统提示
                 system_prompt=None,
 
@@ -59,6 +62,36 @@ class AI:
         # 工具配置
         self.mcp_paths = mcp_paths or []
         self.funcs = {}
+        self.mcp_managers = {}  # 存储每个 server 的 MCPServerManager 实例
+
+        # MCP 工具描述字典 - 独立于 system_prompt
+        self.mcp_tools_desc = {}  # {tool_name: description}
+        self.enabled_mcp_tools = set()  # 已启用的 MCP 工具集合
+
+        # 会话配置管理
+        self.chat_name = chat_name or "default"
+        self.conversation_config = None
+
+        # 如果提供了会话名称,从配置文件加载 API key
+        if chat_name:
+            try:
+                from utils.conversation_config import get_global_config_manager
+                config_manager = get_global_config_manager()
+                self.conversation_config = config_manager.get_config(chat_name)
+
+                # 从配置文件加载 API key (如果未提供)
+                if not api_key:
+                    api_key = self.conversation_config.get_api_key()
+                    if api_key:
+                        print(f"[AI] Loaded API key from conversation config: {chat_name}")
+
+                # 从配置文件加载其他配置
+                if not api_base:
+                    api_base = self.conversation_config.get_api_base()
+                if not model:
+                    model = self.conversation_config.get_model()
+            except Exception as e:
+                print(f"[AI] Failed to load conversation config: {e}")
 
         # API配置
         self.api_key = api_key
@@ -73,23 +106,46 @@ class AI:
 
         # 自定义提示词（从配置或使用默认值）
         self.command_execution_prompt = command_execution_prompt or (
-            "Execution result: {result}\n\n"
-            "IMPORTANT: This result is from the tool execution. The user CANNOT see this result - only your response will be shown to the user.\n\n"
-            "You must process this result and provide your actual answer/output to the user. Do NOT consider the task complete "
-            "just because a tool was executed. The task is only complete when you have provided the user with the actual "
-            "information or output they requested.\n\n"
-            "Continue processing if needed, or provide your final answer if you have completed what the user asked for."
+            "The command has been executed. Result:\n\n"
+            "{result}\n\n"
+            "【DECISION REQUIRED】\n"
+            "Choose ONE:\n"
+            "1. Output another YLDEXECUTE: line - if you need more information\n"
+            "2. Provide analysis/answer - if you have sufficient information\n\n"
+            "【RULES】\n"
+            "- Do NOT display raw output\n"
+            "- If continuing: output ONLY YLDEXECUTE: line\n"
+            "- If done: provide direct answer using Markdown"
         )
 
         self.command_retry_prompt = command_retry_prompt or (
-            "Execution failed: {error}\n\n"
-            "Please analyze the error and retry with a corrected command, or provide an alternative solution."
+            "【COMMAND EXECUTION FAILED】\n"
+            "Error: {error}\n\n"
+            "【REQUIRED ACTIONS】\n"
+            "1. Check the error message above\n"
+            "2. Output ONE YLDEXECUTE: instruction with:\n"
+            "   - Corrected command syntax, OR\n"
+            "   - Alternative tool/command that achieves the same goal\n\n"
+            "【CHECKLIST】\n"
+            "- Does the tool/command exist in the available tools list?\n"
+            "- Are parameters in correct format?\n"
+            "- Are file paths correct?\n"
+            "- Is there an alternative approach?\n\n"
+            "Output ONLY the next YLDEXECUTE: line. Do not provide explanations."
         )
 
         self.final_summary_prompt = final_summary_prompt or (
-            "Based on all the execution results, please provide a FINAL SUMMARY in Chinese of what was found or accomplished. "
-            "This is the FINAL request - after this summary, do NOT execute any more commands. "
-            "Just provide the summary and stop."
+            "【FINAL SUMMARY REQUIRED】\n\n"
+            "Provide a summary of completed work:\n\n"
+            "1. What was the user's request?\n"
+            "2. What did you accomplish?\n"
+            "3. What are the key results?\n\n"
+            "【FORMAT】\n"
+            "- Use Markdown (headings, bullet points, code blocks)\n"
+            "- Do NOT show raw command output\n"
+            "- Explain in clear language\n"
+            "- If incomplete, state what remains\n\n"
+            "Output ONLY the summary. No more commands."
         )
 
         self.max_execution_iterations = max_execution_iterations
@@ -103,12 +159,9 @@ class AI:
         self.presence_penalty = presence_penalty
         self.frequency_penalty = frequency_penalty
 
-        # 系统提示 - 使用完整的系统提示
-        self.system_prompt = system_prompt or self.get_complete_system_prompt()
-        
         # 内部对话历史 - 由外部管理，但这里保留用于处理
         self.conv_his = []
-        
+
         # 执行状态跟踪
         self.execution_status = {
             "status": "idle",
@@ -116,24 +169,57 @@ class AI:
             "tool_args": None,
             "start_time": None
         }
-        
+
         # 停止标志
         self._stop_flag = False
-        
+
         # 初始化AI客户端
         self.init_ai_client()
-        
-        # 加载MCP工具
+
+        # 加载MCP工具 - 必须在生成系统提示之前
         self.load_mcp_tools()
-        
+
+        # 系统提示 - 使用有效的系统提示（包含工具描述）
+        # 注意：使用 get_effective_system_prompt() 而不是 get_complete_system_prompt()
+        if system_prompt:
+            self.system_prompt = system_prompt
+        else:
+            self.system_prompt = self.get_complete_system_prompt()
+
+        # 获取包含工具描述的有效系统提示
+        effective_prompt = self.get_effective_system_prompt()
+
+        # 调试：打印系统提示的前500个字符
+        print(f"[Debug] System prompt (first 500 chars): {effective_prompt[:500]}...")
+        if "【Available Tools】" in effective_prompt:
+            print("[Debug] Tools description FOUND in effective prompt")
+        else:
+            print("[Debug] WARNING: Tools description NOT FOUND in effective prompt!")
+
+        # 使用有效提示作为实际的系统提示
+        self.system_prompt = effective_prompt
+
         # 重置对话历史（添加系统提示）
         self.reset_conversation()
         
         print(f"[AI] 初始化完成，加载了 {len(self.funcs)} 个工具，stream={self.stream}")
-    
+
+    def _sanitize_name(self, name: str) -> str:
+        """清理会话名称，用作文件夹名"""
+        import re
+        # 移除非法字符
+        safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_', '.')).strip()
+        # 替换空格为下划线
+        safe_name = safe_name.replace(' ', '_')
+        return safe_name or "default_chat"
+
     def get_complete_system_prompt(self):
         """返回完整的系统提示"""
-        return f"""
+        # 生成工具描述
+        tools_desc = self.gen_tools_desc()
+
+        # 基础系统提示
+        base_prompt = f"""
 You are an AI assistant that can directly execute commands and call available tools.
 
 【Core Principles】
@@ -149,6 +235,13 @@ You are an AI assistant that can directly execute commands and call available to
 3. **Use Correct Tools and Syntax**:
 - Only use actually available tools
 - Ensure command syntax is correct, especially for file operations
+
+【Output Format Requirements】
+- **IMPORTANT**: Always format your responses using **Markdown** for better readability
+- Use proper headings (##, ###), bullet points, code blocks, and bold text where appropriate
+- For code examples, use triple backticks (```) to create code blocks
+- For structured information, use tables or lists
+- Keep responses well-organized and easy to scan
 
 Before executing MCP tools, please check:
 1. Are all required parameters provided in the correct format?
@@ -192,6 +285,12 @@ Wrong: {self.command_start} echo {self.command_separator} content {self.command_
 
 Please strictly follow these rules to ensure responses are concise, accurate, and meet actual user needs.
 """
+
+        # 如果有工具描述，添加到系统提示开头
+        if tools_desc:
+            return tools_desc + "\n\n" + base_prompt.strip()
+        else:
+            return base_prompt.strip()
     
     # === MCP工具加载 ===
     
@@ -252,52 +351,234 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
     def load_mcp_tools(self):
         """从路径加载MCP工具"""
         if not self.mcp_paths:
-            print("[Info] No MCP paths provided, skipping tool loading")
+            print("[Info] No MCP paths to load")
+            self.enabled_mcp_tools = set()
             return
-        
-        # 检查默认工具
-        default_tools = []
-        ocr_path = "./tools/ocr.py"
-        mcp_config_path = "./tools/mcp_config.json"
-        
-        for tool_path in [ocr_path, mcp_config_path]:
-            if os.path.exists(tool_path) and tool_path not in self.mcp_paths:
-                self.mcp_paths.append(tool_path)
-                print(f"[Info] Added default tool: {tool_path}")
-        
-        # 验证路径
+
+        print(f"[Info] Loading {len(self.mcp_paths)} MCP tools during initialization...")
+
+        # 直接加载工具
+        self._load_mcp_from_paths()
+
+        # 启用所有加载的工具
+        self.enabled_mcp_tools = set(self.mcp_tools_desc.keys())
+        print(f"[Info] Loaded {len(self.funcs)} tools, enabled {len(self.enabled_mcp_tools)} tools")
+
+    def reload_mcp_tools(self, mcp_paths=None):
+        """按需重新加载 MCP 工具（从 settings 或会话配置）"""
+        if mcp_paths is None:
+            mcp_paths = self.mcp_paths
+
+        if not mcp_paths:
+            print("[Info] No MCP paths to load")
+            return
+
+        print(f"[Info] Loading {len(mcp_paths)} MCP tools on demand...")
+
+        # 使用加载逻辑
+        self._load_mcp_from_paths()
+
+        # 启用所有加载的工具
+        self.enabled_mcp_tools = set(self.mcp_tools_desc.keys())
+        print(f"[Info] Enabled {len(self.enabled_mcp_tools)} MCP tools")
+
+    def _load_mcp_from_paths(self):
+        """从指定路径加载 MCP 工具"""
+        # 不再自动添加默认工具
+        # 用户必须明确添加工具
+
+        print(f"\n[Debug] _load_mcp_from_paths called with {len(self.mcp_paths)} paths:")
+        for p in self.mcp_paths:
+            print(f"  - {p}")
+
+        # 验证路径并转换为绝对路径
         valid_paths = []
         for path in self.mcp_paths:
-            # 尝试解析相对路径
-            if not os.path.isabs(path) and not os.path.exists(path):
-                resolved_path = os.path.join(os.getcwd(), path)
-                if os.path.exists(resolved_path):
-                    valid_paths.append(resolved_path)
+            print(f"\n[Debug] Processing path: {path}")
+
+            # 如果是绝对路径且存在，直接使用
+            if os.path.isabs(path) and os.path.exists(path):
+                valid_paths.append(path)
+                print(f"[Debug]   Absolute path exists, using: {path}")
+                continue
+
+            # 如果是相对路径，只从 data/chat_name/tools/ 查找
+            if not os.path.isabs(path):
+                # 处理相对路径（移除 ./ 前缀）
+                if path.startswith("./"):
+                    relative_filename = path[2:]  # 移除 ./
                 else:
-                    print(f"[Warning] File does not exist: {path}")
+                    relative_filename = path
+
+                print(f"[Debug]   Relative filename: {relative_filename}")
+
+                # 只从 data/chat_name/tools/ 目录查找
+                if self.chat_name:
+                    chat_dir = os.path.join("data", self._sanitize_name(self.chat_name))
+                    tools_dir = os.path.join(chat_dir, "tools")
+                    chat_path = os.path.join(tools_dir, relative_filename)
+
+                    print(f"[Debug]   chat_dir: {chat_dir}")
+                    print(f"[Debug]   tools_dir: {tools_dir}")
+                    print(f"[Debug]   chat_path: {chat_path}")
+                    print(f"[Debug]   chat_path exists: {os.path.exists(chat_path)}")
+
+                    if os.path.exists(chat_path):
+                        abs_path = os.path.abspath(chat_path)
+                        valid_paths.append(abs_path)
+                        print(f"[Info] Found MCP tool: {abs_path}")
+                    else:
+                        print(f"[Warning] File does not exist: {path}")
+                        print(f"[Debug]   Tried path: {os.path.abspath(chat_path)}")
+                else:
+                    print(f"[Warning] No chat_name set, cannot resolve relative path: {path}")
             elif os.path.exists(path):
                 valid_paths.append(path)
+                print(f"[Debug]   Path exists, using: {path}")
             else:
                 print(f"[Warning] File does not exist: {path}")
-        
+
         if not valid_paths:
             print("[Warning] No valid MCP file paths found")
             return
-        
+
         print(f"[Info] Will load {len(valid_paths)} MCP files")
-        
+
         # 加载有效的MCP文件
         _, self.funcs = self.load_mult_mcp_mod(valid_paths)
-        
-        # 生成工具描述并更新系统提示
+
+        # 存储工具描述到字典(不直接加入 system_prompt)
         if self.funcs:
-            tools_desc = self.gen_tools_desc()
-            current_prompt = self.system_prompt
-            
-            # 将工具描述添加到系统提示开头
-            self.system_prompt = tools_desc + '\n\n' + current_prompt
-            self.update_system_prompt(self.system_prompt)
-            print("[Info] Updated system prompt with tool descriptions")
+            for func_name, func in self.funcs.items():
+                doc = func.__doc__ or "No description"
+                self.mcp_tools_desc[func_name] = doc
+                print(f"[Info] Stored tool description: {func_name}")
+            print(f"[Info] Stored {len(self.mcp_tools_desc)} tool descriptions (not added to system_prompt yet)")
+
+    def _load_mcp_from_config(self, config_path: str = None):
+        """从 MCP 配置文件加载工具 - 为每个 server 创建独立的 MCPServerManager 实例
+
+        Args:
+            config_path: 配置文件路径,默认为 ./tools/mcp_config.json
+        """
+        import json
+
+        config_path = config_path or os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "mcp_config.json")
+
+        if not os.path.exists(config_path):
+            print(f"[Warning] MCP config file not found at: {config_path}")
+            return
+
+        try:
+            # 读取配置文件
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+
+            servers_config = config_data.get("servers", {})
+
+            if not servers_config:
+                print("[Warning] No servers defined in MCP config")
+                return
+
+            print(f"[Info] Found {len(servers_config)} MCP servers in config")
+
+            # 存储所有 MCP server 管理器实例
+            self.mcp_managers = {}
+            self.funcs = {}
+
+            # 为每个 server 创建独立的 MCPServerManager 实例
+            for server_name, server_config in servers_config.items():
+                print(f"[Info] Initializing MCP server: {server_name}")
+
+                try:
+                    # 创建独立的 MCPServerManager 实例
+                    mcp_manager = MCPServerManager()
+
+                    # 构建配置字符串 (mcp_utils.py 需要的格式)
+                    server_json = json.dumps({
+                        "mcpServers": {
+                            server_name: server_config
+                        }
+                    })
+
+                    # 解析配置
+                    if not mcp_manager.parse_config(server_json):
+                        print(f"[Warning] Failed to parse config for {server_name}")
+                        continue
+
+                    # 启动 server 进程
+                    if not mcp_manager.start_ser(server_name):
+                        print(f"[Warning] Failed to start server {server_name}")
+                        continue
+
+                    # 初始化 server 并获取工具列表
+                    if not mcp_manager.init_ser(server_name):
+                        print(f"[Warning] Failed to initialize server {server_name}")
+                        continue
+
+                    # 保存 manager 实例
+                    self.mcp_managers[server_name] = mcp_manager
+
+                    # 为该 server 的所有工具创建函数
+                    server_tools = mcp_manager.tools.get(server_name, [])
+                    print(f"[Info] Server {server_name} provides {len(server_tools)} tools")
+
+                    for tool in server_tools:
+                        tool_name = tool.get('name', '')
+                        if not tool_name:
+                            continue
+
+                        # 创建函数名: mcp_servername_toolname
+                        func_name = f"mcp_{server_name}_{tool_name}"
+                        tool_desc = tool.get('description', 'No description')
+
+                        # 创建工具函数 (使用闭包捕获 manager 和 server_name)
+                        def make_tool_func(manager, ser_name, t_name, t_desc):
+                            def tool_func(**kwargs):
+                                try:
+                                    result = manager.call_tool(ser_name, t_name, kwargs)
+                                    return json.dumps(result, ensure_ascii=False, indent=2)
+                                except Exception as e:
+                                    error_result = {"error": str(e)}
+                                    return json.dumps(error_result, ensure_ascii=False, indent=2)
+
+                            tool_func.__name__ = t_name
+                            tool_func.__doc__ = t_desc
+                            tool_func.__server_name__ = ser_name  # 标记属于哪个 server
+                            return tool_func
+
+                        self.funcs[func_name] = make_tool_func(
+                            mcp_manager, server_name, tool_name, tool_desc
+                        )
+
+                        print(f"[Info]   - Loaded tool: {func_name}")
+
+                except Exception as e:
+                    print(f"[Error] Failed to load server {server_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
+
+            # 打印汇总信息
+            print(f"[Info] Successfully loaded {len(self.funcs)} MCP tools from {len(self.mcp_managers)} servers")
+
+            # 存储工具描述到字典(不直接加入 system_prompt)
+            if self.funcs:
+                for func_name, func in self.funcs.items():
+                    doc = func.__doc__ or "No description"
+                    self.mcp_tools_desc[func_name] = doc
+                    print(f"[Info] Stored tool description: {func_name}")
+                print(f"[Info] Stored {len(self.mcp_tools_desc)} tool descriptions (not added to system_prompt yet)")
+            else:
+                print("[Warning] No MCP tools loaded")
+
+        except Exception as e:
+            print(f"[Error] Failed to load MCP config: {e}")
+            import traceback
+            traceback.print_exc()
+            # 降级到旧方法
+            print("[Info] Falling back to old MCP loading method")
+            self._load_mcp_from_paths()
     
     def load_mult_mcp_mod(self, mcp_paths):
         """加载多个MCP文件"""
@@ -316,21 +597,147 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
         return all_mods, all_funcs
     
     def gen_tools_desc(self):
-        """生成工具描述"""
-        if not self.funcs:
+        """生成工具描述 - 不截断任何描述"""
+        print(f"[Debug] mcp_tools_desc keys: {list(self.mcp_tools_desc.keys())}")
+        print(f"[Debug] funcs keys: {list(self.funcs.keys())}")
+
+        if not self.mcp_tools_desc:
+            print("[Debug] mcp_tools_desc is empty, returning empty string")
             return ""
-        
-        desc = "You can use the following tools:\n"
-        for func_name, func in self.funcs.items():
-            doc = func.__doc__ or "No description"
-            # 截断长描述
-            if len(doc) > 150:
-                doc = doc[:150] + "..."
-            desc += f"- {func_name}: {doc}\n"
-        
+
+        desc = "【Available Tools】\nYou can use the following tools:\n\n"
+
+        # 按服务器分组工具
+        server_tools = {}
+        for func_name in self.mcp_tools_desc.keys():
+            if func_name in self.funcs:
+                func = self.funcs[func_name]
+                server_name = getattr(func, '__server_name__', 'Other')
+
+                if server_name not in server_tools:
+                    server_tools[server_name] = []
+
+                doc = self.mcp_tools_desc[func_name]
+                server_tools[server_name].append({
+                    'name': func_name,
+                    'desc': doc
+                })
+
+        # 为每个 server 生成工具描述(不截断)
+        for server_name, tools in server_tools.items():
+            desc += f"─── {server_name.upper()} SERVER ───\n"
+
+            for tool in tools:
+                tool_name = tool['name']
+                tool_desc = tool['desc']
+
+                desc += f"  • {tool_name}\n"
+                desc += f"    {tool_desc}\n\n"
+
         # 添加使用示例
-        desc += f"\nUsage example: {self.command_start} tool_name {self.command_separator} param1 {self.command_separator} param2\n"
+        desc += f"\n【Tool Usage】\n"
+        desc += f"Format: {self.command_start} tool_name {self.command_separator} key1=value1 {self.command_separator} key2=value2\n"
+        desc += f"Example: {self.command_start} mcp_filesystem_read_file {self.command_separator} path=/path/to/file.txt\n\n"
+
+        desc += "【Important Notes】\n"
+        desc += "1. Use key=value format for parameters\n"
+        desc += "2. Parameter values should be properly escaped/quoted if needed\n"
+        desc += "3. Only use tools from the list above\n"
+
         return desc
+
+    def get_effective_system_prompt(self):
+        """
+        获取有效的系统提示
+        将选中的 MCP 工具描述与用户 system_prompt 组合
+        """
+        base_prompt = self.system_prompt
+
+        print(f"[Debug] get_effective_system_prompt called:")
+        print(f"  - enabled_mcp_tools count: {len(self.enabled_mcp_tools)}")
+        print(f"  - mcp_tools_desc count: {len(self.mcp_tools_desc)}")
+        print(f"  - funcs count: {len(self.funcs)}")
+
+        # 获取已启用工具的描述
+        if self.enabled_mcp_tools and self.mcp_tools_desc:
+            enabled_desc = {}
+            for tool_name in self.enabled_mcp_tools:
+                if tool_name in self.mcp_tools_desc:
+                    enabled_desc[tool_name] = self.mcp_tools_desc[tool_name]
+
+            print(f"[Debug] Found {len(enabled_desc)} enabled tool descriptions")
+
+            if enabled_desc:
+                # 生成已启用工具的描述
+                desc = "【Available Tools】\nYou can use the following tools:\n\n"
+
+                # 按服务器分组
+                server_tools = {}
+                for tool_name in enabled_desc.keys():
+                    if tool_name in self.funcs:
+                        func = self.funcs[tool_name]
+                        server_name = getattr(func, '__server_name__', 'Other')
+
+                        if server_name not in server_tools:
+                            server_tools[server_name] = []
+
+                        server_tools[server_name].append({
+                            'name': tool_name,
+                            'desc': enabled_desc[tool_name]
+                        })
+
+                # 生成完整描述
+                for server_name, tools in server_tools.items():
+                    desc += f"─── {server_name.upper()} SERVER ───\n"
+
+                    for tool in tools:
+                        desc += f"  • {tool['name']}\n"
+                        desc += f"    {tool['desc']}\n\n"
+
+                # 添加使用说明
+                desc += f"\n【Tool Usage】\n"
+                desc += f"Format: {self.command_start} tool_name {self.command_separator} key1=value1 {self.command_separator} key2=value2\n"
+                desc += f"Example: {self.command_start} mcp_filesystem_read_file {self.command_separator} path=/path/to/file.txt\n\n"
+
+                desc += "【Important Notes】\n"
+                desc += "1. Use key=value format for parameters\n"
+                desc += "2. Parameter values should be properly escaped/quoted if needed\n"
+                desc += "3. Only use tools from the list above\n"
+
+                # 组合:工具描述 + \n\n + 用户 system_prompt
+                final_prompt = desc + "\n\n" + base_prompt
+
+                # 调试: 打印最终提示的前500个字符
+                print(f"[Debug] Final effective prompt (first 500 chars):\n{final_prompt[:500]}...")
+
+                return final_prompt
+
+        print("[Debug] No enabled tools or descriptions, returning base prompt only")
+        return base_prompt
+
+    def set_tool_enabled(self, tool_name: str, enabled: bool):
+        """设置工具是否启用"""
+        if enabled:
+            self.enabled_mcp_tools.add(tool_name)
+        else:
+            self.enabled_mcp_tools.discard(tool_name)
+        print(f"[AI] Tool {tool_name} {'enabled' if enabled else 'disabled'}")
+
+    def is_tool_enabled(self, tool_name: str) -> bool:
+        """检查工具是否启用"""
+        return tool_name in self.enabled_mcp_tools
+
+    def get_mcp_tools_info(self) -> List[Dict]:
+        """获取所有 MCP 工具的信息(用于设置界面)"""
+        tools_info = []
+        for tool_name, desc in self.mcp_tools_desc.items():
+            tools_info.append({
+                'name': tool_name,
+                'description': desc,  # 完整描述,不截断
+                'enabled': self.is_tool_enabled(tool_name),
+                'server': getattr(self.funcs.get(tool_name), '__server_name__', 'Unknown') if tool_name in self.funcs else 'Unknown'
+            })
+        return tools_info
     
     # === 核心方法 ===
     
@@ -488,10 +895,12 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
             current_history = external_history.copy()
         else:
             current_history = self.conv_his.copy()
-        
+
         # Ensure system prompt is at the beginning
         if not current_history or current_history[0].get("role") != "system":
-            current_history.insert(0, {"role": "system", "content": self.system_prompt})
+            # 使用有效的系统提示(包含已启用的 MCP 工具)
+            effective_prompt = self.get_effective_system_prompt()
+            current_history.insert(0, {"role": "system", "content": effective_prompt})
         
         # Add user input to history
         current_history.append({"role": "user", "content": user_input})
@@ -828,13 +1237,30 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
         
         # 创建历史副本
         history = conversation_history.copy()
-        
+
         # 确保系统提示
         if not history or history[0].get("role") != "system":
-            history.insert(0, {"role": "system", "content": self.system_prompt})
-        
-        # 添加用户输入
-        history.append({"role": "user", "content": user_input})
+            # 使用有效的系统提示(包含已启用的 MCP 工具)
+            effective_prompt = self.get_effective_system_prompt()
+            history.insert(0, {"role": "system", "content": effective_prompt})
+
+        # 注意：用户消息已经在 MessageProcessor 中添加，这里不需要再添加
+        # 如果 history 中最后一条已经是用户消息，说明已经被添加过了
+        if history and history[-1].get("role") == "user" and history[-1].get("content") == user_input:
+            # 用户消息已存在，不需要重复添加
+            pass
+        else:
+            # 用户消息不存在，添加用户输入
+            history.append({"role": "user", "content": user_input})
+
+        # 打印完整的prompt数据
+        print("\n" + "="*80)
+        print("[AI] COMPLETE PROMPT SENT TO API:")
+        print("="*80)
+        for i, msg in enumerate(history):
+            print(f"\n--- Message {i+1} ({msg['role']}) ---")
+            print(msg['content'])
+        print("="*80 + "\n")
 
         iteration = 0
         full_response = ""
@@ -919,18 +1345,21 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
 
                     iteration += 1
 
-                    # 如果执行失败，AI应该重新尝试（使用自定义重试提示词）
-                    if ("Execution failed" in res or "Error" in res) and iteration < 2:
-                        print("[AI] Command execution failed, removing failed command from history")
+                    # 如果执行失败，显示错误信息并让 AI 重新尝试
+                    # 移除 iteration < 2 的限制，允许持续重试
+                    if ("Execution failed" in res or "Error" in res or "error:" in res.lower()):
+                        print("[AI] Command execution failed, showing error to user")
                         # Remove the failed command and execution prompt from history
                         if len(history) >= 2:
                             history.pop()  # Remove execution prompt
                             history.pop()  # Remove command response
                             print(f"[AI] Removed failed command, history size now: {len(history)}")
 
+                        # 显示错误信息给用户
+                        error_prompt = f"**错误**: {res}\n\n" + self.command_retry_prompt.format(error=res)
                         history.append({
                             "role": "user",
-                            "content": self.command_retry_prompt.format(error=res)
+                            "content": error_prompt
                         })
                         continue
 
@@ -1413,7 +1842,9 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
     
     def reset_conversation(self):
         """重置对话历史"""
-        self.conv_his = [{"role": "system", "content": self.system_prompt}]
+        # 使用有效的系统提示(包含已启用的 MCP 工具)
+        effective_prompt = self.get_effective_system_prompt()
+        self.conv_his = [{"role": "system", "content": effective_prompt}]
         print("[AI] Conversation history reset")
     
     def load_conversation_history(self, history_messages: List[Dict]):
@@ -1458,31 +1889,36 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
     def update_config(self, config_dict: Dict):
         """从字典更新配置，不创建新实例"""
         print(f"[AI] Updating AI configuration for existing instance")
-        
+
         # 更新API配置
         if 'api_key' in config_dict and config_dict['api_key']:
             self.api_key = config_dict['api_key']
-        
+            # 保存到会话配置（.confignore）
+            if self.conversation_config:
+                self.conversation_config.set_api_key(self.api_key)
+
         if 'api_base' in config_dict and config_dict['api_base']:
             self.api_base = config_dict['api_base']
-        
+            # 不再保存到 ConversationConfig（只存 API key）
+
         if 'model' in config_dict and config_dict['model']:
             self.model = config_dict['model']
-            
+            # 不再保存到 ConversationConfig
+
         # 重新初始化客户端
         if any(key in config_dict for key in ['api_key', 'api_base', 'model']):
             self.init_ai_client()
-        
+
         # 更新模型参数
         if 'temperature' in config_dict:
             self.temperature = config_dict['temperature']
-        
+
         if 'max_tokens' in config_dict:
             self.max_tokens = config_dict['max_tokens']
-        
+
         if 'top_p' in config_dict:
             self.top_p = config_dict['top_p']
-        
+
         if 'stop' in config_dict:
             self.stop = config_dict['stop']
         
@@ -1514,10 +1950,21 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
         # 更新MCP路径并重新加载工具
         if 'mcp_paths' in config_dict:
             new_paths = config_dict['mcp_paths']
+            print(f"[AI] MCP paths changed, reloading tools")
+            print(f"[Debug] New paths: {new_paths}")
+            print(f"[Debug] Old paths: {self.mcp_paths}")
+
             if set(new_paths) != set(self.mcp_paths):
-                print(f"[AI] MCP paths changed, reloading tools")
                 self.mcp_paths = new_paths
-                self.load_mcp_tools()
+                # 实际加载 MCP 工具（不再跳过）
+                print("[AI] Calling _load_mcp_from_paths...")
+                self._load_mcp_from_paths()
+                print(f"[Debug] Loaded {len(self.mcp_tools_desc)} tool descriptions")
+                # 启用所有加载的工具
+                self.enabled_mcp_tools = set(self.mcp_tools_desc.keys())
+                print(f"[Info] Enabled {len(self.enabled_mcp_tools)} MCP tools after config update")
+            else:
+                print("[AI] MCP paths unchanged, skipping reload")
 
         # 更新自定义提示词
         if 'command_execution_prompt' in config_dict and config_dict['command_execution_prompt']:
@@ -1532,6 +1979,12 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
         if 'max_execution_iterations' in config_dict:
             self.max_execution_iterations = config_dict['max_execution_iterations']
             print(f"[AI] Max execution iterations updated to: {self.max_execution_iterations}")
+
+        # 更新已启用的 MCP 工具
+        if 'enabled_mcp_tools' in config_dict:
+            enabled_tools = config_dict['enabled_mcp_tools']
+            self.enabled_mcp_tools = set(enabled_tools)
+            print(f"[AI] Enabled {len(self.enabled_mcp_tools)} MCP tools")
 
         print(f"[AI] Configuration updated successfully, stream={self.stream}")
     
@@ -1560,9 +2013,35 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
             "max_iterations": self.max_iterations,
             
             # 工具配置
-            "mcp_paths": self.mcp_paths.copy(),
-            "available_tools": list(self.funcs.keys())
+            "mcp_paths": self._convert_paths_to_relative(self.mcp_paths.copy()),
+            "available_tools": list(self.funcs.keys()),
+            "enabled_mcp_tools": list(self.enabled_mcp_tools)  # 保存已启用的工具
         }
+
+    def _convert_paths_to_relative(self, paths: List[str]) -> List[str]:
+        """将路径转换为相对路径格式(使用正斜杠)"""
+        relative_paths = []
+        for path in paths:
+            # 转换为相对路径
+            if os.path.isabs(path):
+                try:
+                    rel_path = os.path.relpath(path, os.getcwd())
+                except ValueError:
+                    # 如果无法计算相对路径,使用原始路径
+                    rel_path = path
+            else:
+                rel_path = path
+
+            # 统一使用正斜杠
+            rel_path = rel_path.replace('\\', '/')
+
+            # 如果不是以 ./ 开头的相对路径,添加 ./
+            if not rel_path.startswith('./') and not rel_path.startswith('../'):
+                rel_path = './' + rel_path
+
+            relative_paths.append(rel_path)
+
+        return relative_paths
     
     def get_execution_status(self) -> Dict:
         """获取当前执行状态用于状态栏显示"""
@@ -1581,7 +2060,29 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
         print("\nAvailable tools:")
         tools = self.get_available_tools()
         for i, tool in enumerate(tools, 1):
-            print(f"{i:2}. {tool['name']}: {tool['description'][:60]}...")
+            # 打印完整描述,不截断
+            desc = tool['description']
+            print(f"{i:2}. {tool['name']}: {desc}")
+
+    def cleanup_mcp_servers(self):
+        """清理所有 MCP server 进程"""
+        if hasattr(self, 'mcp_managers') and self.mcp_managers:
+            print(f"[Info] Cleaning up {len(self.mcp_managers)} MCP servers...")
+            for server_name, manager in self.mcp_managers.items():
+                try:
+                    manager.stop()
+                    print(f"[Info] Stopped MCP server: {server_name}")
+                except Exception as e:
+                    print(f"[Warning] Failed to stop server {server_name}: {e}")
+            self.mcp_managers.clear()
+            print("[Info] MCP servers cleanup complete")
+
+    def __del__(self):
+        """析构函数 - 确保 MCP servers 被正确关闭"""
+        try:
+            self.cleanup_mcp_servers()
+        except:
+            pass
 
 
 # 配置文件加载函数

@@ -23,25 +23,19 @@ class AIHistoryManager:
 
     # 隐藏的历史记录使用指导（代码内控制，用户不可见）
     HISTORY_USAGE_GUIDANCE = """
+
 【Conversation History Usage Guidelines】
-1. **Reference Only**: {history_guideline_reference_only}
-2. **Focus on Current Question**: {history_guideline_focus_current}
-3. **Avoid Unnecessary Association**: {history_guideline_avoid_association}
-4. **No Retroactive Summarization**: {history_guideline_no_summarization}
-5. **Independent Responses**: {history_guideline_independent}
-6. **Exception**: {history_guideline_exception}
+1. **Reference Only**: Use conversation history only as a knowledge base for reference
+2. **Focus on Current Question**: Only answer what the user is currently asking, unless explicitly requested to review or summarize previous conversations
+3. **Avoid Unnecessary Association**: Do not make assumptions or establish connections between unrelated conversations
+4. **No Retroactive Summarization**: When answering simple questions, do not summarize or evaluate the entire conversation session
+5. **Independent Responses**: Each response should focus on the current question, do not continuously reference or expand based on previous topics
+6. **Exception**: If the user explicitly requests a summary, review, or correlation analysis, follow the user's specific requirements
 """
 
     def get_history_usage_guidance(self):
-        """获取 i18n 化的历史记录使用指导"""
-        return self.HISTORY_USAGE_GUIDANCE.format(
-            history_guideline_reference_only=i18n.tr("history_guideline_reference_only"),
-            history_guideline_focus_current=i18n.tr("history_guideline_focus_current"),
-            history_guideline_avoid_association=i18n.tr("history_guideline_avoid_association"),
-            history_guideline_no_summarization=i18n.tr("history_guideline_no_summarization"),
-            history_guideline_independent=i18n.tr("history_guideline_independent"),
-            history_guideline_exception=i18n.tr("history_guideline_exception")
-        )
+        """Get history usage guidance (in English for AI understanding)"""
+        return self.HISTORY_USAGE_GUIDANCE
 
     def __init__(self, ai_conv_dir: str = "ai_conv"):
         self.ai_conv_dir = Path(ai_conv_dir)

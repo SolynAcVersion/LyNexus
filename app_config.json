@@ -1,10 +1,11 @@
 {
   "chat_list": [
-    "filre_operator"
+    "t",
+    "对话_1"
   ],
   "app_settings": {
     "window_width": 1400,
     "window_height": 900,
-    "last_active_chat": "filre_operator"
+    "last_active_chat": "t"
   }
 }

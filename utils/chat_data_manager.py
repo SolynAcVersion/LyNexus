@@ -104,7 +104,7 @@ class ChatDataManager:
     def copy_mcp_tool_to_chat(self, chat_name: str, original_path: str) -> Optional[str]:
         """
         Copy an MCP tool file to the chat's tools directory
-        Returns the absolute path to the copied file, or None if failed
+        Returns the relative path (./tools/filename.py) to the copied file, or None if failed
         """
         chat_dir = self.get_chat_dir(chat_name)
         if not chat_dir.exists():
@@ -112,6 +112,10 @@ class ChatDataManager:
             return None
 
         tools_dir = self.get_tools_dir(chat_name)
+
+        # 确保 tools 目录存在
+        tools_dir.mkdir(parents=True, exist_ok=True)
+
         original_path_obj = Path(original_path)
 
         if not original_path_obj.exists():
@@ -125,10 +129,12 @@ class ChatDataManager:
         try:
             # Copy the file
             shutil.copy2(original_path, dest_path)
-            # Return absolute path
-            absolute_path = str(dest_path.resolve())
-            print(f"[ChatData] Copied MCP tool to: {absolute_path}")
-            return absolute_path
+
+            # Return relative path WITH tools/ prefix (./tools/filename.py)
+            relative_path = f"./tools/{filename}"
+            print(f"[ChatData] Copied MCP tool: {original_path} -> {dest_path}")
+            print(f"[ChatData] Relative path: {relative_path}")
+            return relative_path
         except Exception as e:
             print(f"[ChatData] Failed to copy MCP tool: {e}")
             return None
@@ -151,6 +157,81 @@ class ChatDataManager:
 
         return tool_files
 
+    def resolve_mcp_tool_path(self, chat_name: str, relative_path: str) -> Optional[Path]:
+        """
+        Resolve a relative MCP tool path to absolute path
+
+        Args:
+            chat_name: 会话名称
+            relative_path: 相对路径 (如 ./ocr.py)
+
+        Returns:
+            绝对路径，如果文件不存在则返回 None
+        """
+        if relative_path.startswith("./"):
+            filename = relative_path[2:]  # 移除 ./
+            tools_dir = self.get_tools_dir(chat_name)
+            absolute_path = tools_dir / filename
+
+            if absolute_path.exists():
+                return absolute_path
+            else:
+                print(f"[ChatData] MCP tool file not found: {absolute_path}")
+                return None
+
+        return None
+
+    def copy_mcp_config_to_chat(self, chat_name: str, source_config_path: str = "tools/mcp_config.json") -> Optional[str]:
+        """
+        Copy MCP config file to chat's tools directory
+
+        Args:
+            chat_name: 会话名称
+            source_config_path: 源配置文件路径,默认为 tools/mcp_config.json
+
+        Returns:
+            复制后的绝对路径,失败返回 None
+        """
+        chat_dir = self.get_chat_dir(chat_name)
+        if not chat_dir.exists():
+            print(f"[ChatData] Chat folder does not exist: {chat_name}")
+            return None
+
+        tools_dir = self.get_tools_dir(chat_name)
+        source_path = Path(source_config_path)
+
+        if not source_path.exists():
+            print(f"[ChatData] Source MCP config does not exist: {source_config_path}")
+            return None
+
+        dest_path = tools_dir / "mcp_config.json"
+
+        try:
+            shutil.copy2(source_path, dest_path)
+            absolute_path = str(dest_path.resolve())
+            print(f"[ChatData] Copied MCP config to: {absolute_path}")
+            return absolute_path
+        except Exception as e:
+            print(f"[ChatData] Failed to copy MCP config: {e}")
+            return None
+
+    def get_chat_mcp_config_path(self, chat_name: str) -> Optional[Path]:
+        """
+        获取会话的 MCP 配置文件路径
+
+        Args:
+            chat_name: 会话名称
+
+        Returns:
+            配置文件路径,不存在返回 None
+        """
+        tools_dir = self.get_tools_dir(chat_name)
+        if not tools_dir.exists():
+            return None
+
+        config_path = tools_dir / "mcp_config.json"
+        return config_path if config_path.exists() else None
+
     # === Settings Management ===
 
     def load_chat_settings(self, chat_name: str) -> Optional[Dict]:
@@ -164,12 +245,30 @@ class ChatDataManager:
             with open(settings_path, 'r', encoding='utf-8') as f:
                 settings = json.load(f)
 
-            # Convert relative MCP paths to absolute paths
+            # Convert MCP paths to relative paths with forward slashes
             if 'mcp_paths' in settings:
-                settings['mcp_paths'] = [
-                    os.path.abspath(path) if not os.path.isabs(path) else path
-                    for path in settings['mcp_paths']
-                ]
+                relative_paths = []
+                for path in settings['mcp_paths']:
+                    # 转换为相对路径
+                    if os.path.isabs(path):
+                        try:
+                            rel_path = os.path.relpath(path, os.getcwd())
+                        except ValueError:
+                            # 如果无法计算相对路径,使用原始路径
+                            rel_path = path
+                    else:
+                        rel_path = path
+
+                    # 统一使用正斜杠
+                    rel_path = rel_path.replace('\\', '/')
+
+                    # 如果不是以 ./ 开头的相对路径,添加 ./
+                    if not rel_path.startswith('./') and not rel_path.startswith('../'):
+                        rel_path = './' + rel_path
+
+                    relative_paths.append(rel_path)
+
+                settings['mcp_paths'] = relative_paths
 
             return settings
         except Exception as e:
