@@ -61,7 +61,7 @@ class MarkdownRenderer:
             'tables',
             'sane_lists',
             'codehilite',
-            # 'nl2br',  # 移除 nl2br，让markdown按标准处理换行（单个\n不换行，两个\n\n才换段落）
+            'nl2br',  # 启用 nl2br，让单个 \n 也换行（更符合聊天界面需求）
         ]
 
         # Add KaTeX if available
@@ -296,8 +296,8 @@ class MarkdownRenderer:
 
         /* Paragraphs */
         .markdown-content p {
-            margin: 1em 0;
-            line-height: 1.8;
+            margin: 0.5em 0;
+            line-height: 1.6;
         }
 
         /* Code blocks */

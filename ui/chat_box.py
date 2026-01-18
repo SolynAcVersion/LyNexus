@@ -130,7 +130,15 @@ class ConversationConfig:
     command_separator: str = "￥|"
     max_iterations: int = 15
     mcp_paths: List[str] = None
+    enabled_mcp_tools: List[str] = None  # List of enabled MCP tool names
     system_prompt: str = ""
+
+    def __post_init__(self):
+        """Initialize default values for mutable fields"""
+        if self.mcp_paths is None:
+            self.mcp_paths = []
+        if self.enabled_mcp_tools is None:
+            self.enabled_mcp_tools = []
 
     # Customizable prompts for command execution flow
     command_execution_prompt: str = (
@@ -163,24 +171,29 @@ class ConversationConfig:
     )
 
     final_summary_prompt: str = (
-        "【FINAL SUMMARY REQUIRED】\n\n"
-        "Provide a summary of completed work:\n\n"
-        "1. What was the user's request?\n"
-        "2. What did you accomplish?\n"
-        "3. What are the key results?\n\n"
-        "【FORMAT】\n"
-        "- Use Markdown (headings, bullet points, code blocks)\n"
-        "- Do NOT show raw command output\n"
-        "- Explain in clear language\n"
-        "- If incomplete, state what remains\n\n"
-        "Output ONLY the summary. No more commands."
+        "You have reached the maximum number of iterations. This is your LAST response.\n\n"
+        "CRITICAL: The user has NOT seen any previous responses.\n"
+        "Only THIS message will be visible to the user.\n\n"
+        "REQUIREMENTS:\n"
+        "1. Answer the user's ORIGINAL question directly\n"
+        "2. Use ALL information from command outputs\n"
+        "3. Give THE ACTUAL ANSWER, not a description\n"
+        "4. DO NOT format as 'Summary' or 'Results'\n"
+        "5. Just provide the answer the user asked for\n\n"
+        "EXAMPLES:\n"
+        "User asked: 'What is my username?'\n"
+        "You found in output: '2300'\n"
+        "You say: 'Your username is: 2300'\n\n"
+        "User asked: 'What files are on my desktop?'\n"
+        "You found: file1.txt, file2.pdf\n"
+        "You say: 'Your desktop contains:\n- file1.txt\n- file2.pdf'\n\n"
+        "DO NOT:\n"
+        "- Do NOT say '## Summary'\n"
+        "- Do NOT say '## Results'\n"
+        "- Do NOT describe what you did\n"
+        "- Do NOT say 'I executed commands to...'\n\n"
+        "Just give the answer the user wants. Now."
     )
-
-    max_execution_iterations: int = 3  # Maximum iterations before forcing summary
-
-    def __post_init__(self):
-        if self.mcp_paths is None:
-            self.mcp_paths = []
 
 
 @dataclass
@@ -315,6 +328,7 @@ class ConversationContextManager:
                 command_separator=config_data.get('command_separator', '￥|'),
                 max_iterations=config_data.get('max_iterations', 15),
                 mcp_paths=config_data.get('mcp_paths', []),
+                enabled_mcp_tools=config_data.get('enabled_mcp_tools', []),
                 system_prompt=config_data.get('system_prompt', ''),
                 command_execution_prompt=config_data.get(
                     'command_execution_prompt',
@@ -327,10 +341,6 @@ class ConversationContextManager:
                 final_summary_prompt=config_data.get(
                     'final_summary_prompt',
                     ConversationConfig.final_summary_prompt
-                ),
-                max_execution_iterations=config_data.get(
-                    'max_execution_iterations',
-                    ConversationConfig.max_execution_iterations
                 )
             )
         else:
@@ -361,7 +371,6 @@ class ConversationContextManager:
             'command_execution_prompt': config.command_execution_prompt,
             'command_retry_prompt': config.command_retry_prompt,
             'final_summary_prompt': config.final_summary_prompt,
-            'max_execution_iterations': config.max_execution_iterations,
             # CRITICAL: Pass chat_name
             'chat_name': conversation_name or 'default'
         }
@@ -370,6 +379,11 @@ class ConversationContextManager:
         ai_kwargs = {k: v for k, v in ai_kwargs.items() if v is not None}
 
         ai_instance = AI(**ai_kwargs)
+
+        # Load enabled_mcp_tools from config
+        if config.enabled_mcp_tools:
+            ai_instance.enabled_mcp_tools = set(config.enabled_mcp_tools)
+            print(f"[ContextManager] Loaded {len(config.enabled_mcp_tools)} enabled tools from config")
 
         return ai_instance
     
@@ -831,7 +845,7 @@ class StreamingProcessor:
                     lines = clean_response.split('\n')
                     clean_response = '\n'.join([
                         line for line in lines
-                        if cmd_start not in line and not line.strip().startswith('YLDEXECUTE')
+                        if cmd_start not in line
                     ]).strip()
 
             full_response = f"{clean_response}\n\n{deduplicated_summary}" if clean_response else deduplicated_summary
@@ -881,6 +895,11 @@ class ModernMessageBubble(QWidget):
 
         self._init_ui()
         self._apply_styling()
+
+        # Initialize text with markdown rendering
+        if message:
+            self.update_text(message)
+
         self._update_size_hint()
     
     def _init_ui(self):
@@ -901,8 +920,8 @@ class ModernMessageBubble(QWidget):
             self.bubble_container.setMaximumWidth(800)
 
         bubble_layout = QVBoxLayout(self.bubble_container)
-        bubble_layout.setContentsMargins(16, 12, 16, 8)
-        bubble_layout.setSpacing(2)
+        bubble_layout.setContentsMargins(16, 12, 16, 6)
+        bubble_layout.setSpacing(0)
         
         # Message label
         self.message_label = QLabel(self.message)
@@ -920,8 +939,9 @@ class ModernMessageBubble(QWidget):
         self.timestamp_label = QLabel(self.timestamp)
         self.timestamp_label.setObjectName("timestamp")
         self.timestamp_label.setAlignment(Qt.AlignRight)
-        self.timestamp_label.setObjectName("timestamp")
         self.timestamp_label.setAlignment(Qt.AlignRight)
+        # Remove any extra margins from timestamp
+        self.timestamp_label.setContentsMargins(0, 0, 0, 0)
         
         timestamp_layout.addStretch()
         timestamp_layout.addWidget(self.timestamp_label)
@@ -1038,25 +1058,46 @@ class ModernMessageBubble(QWidget):
             new_text: New text to display
             force_plain: Force plain text (no markdown rendering)
         """
-        self.current_text = new_text
+        text_length = len(new_text)
 
+        # Smart rendering strategy based on text length
+        if text_length > 100000:  # Very long text (>100k)
+            print(f"[MessageBubble] Very long text ({text_length} chars), using plain text")
+            # Use plain text for very long content to prevent crashes
+            display_text = self.renderer._escape_text(new_text)
+        elif text_length > 50000:  # Long text (50k-100k)
+            print(f"[MessageBubble] Long text ({text_length} chars), truncating")
+            # Truncate to prevent rendering issues
+            truncated = new_text[:50000]
+            display_text = self._render_with_fallback(truncated + "\n\n... (Text truncated at 50,000 characters to prevent crash)")
+        else:
+            # Normal rendering for manageable texts
+            display_text = self._render_with_fallback(new_text, force_plain)
+
+        self.message_label.setText(display_text)
+        self.timestamp_label.setText(datetime.now().strftime("%H:%M"))
+        self._update_size_hint()
+
+    def _render_with_fallback(self, text: str, force_plain: bool = False) -> str:
+        """
+        Render markdown with automatic fallback to plain text on error
+        """
         # Determine if we should render markdown
         should_render = (
             self.enable_markdown and
             not force_plain and
             self.bubble_type != BubbleType.USER_MESSAGE and
-            self.bubble_type not in [BubbleType.COMMAND_REQUEST, BubbleType.ERROR, BubbleType.INFO]
+            self.bubble_type not in [BubbleType.COMMAND_REQUEST, BubbleType.ERROR]
         )
 
-        # Render text (markdown for AI responses, plain for user messages)
-        if should_render:
-            display_text = self.renderer.render(new_text, mode=RenderMode.FINAL)
-        else:
-            display_text = self.renderer._escape_text(new_text)
+        if not should_render:
+            return self.renderer._escape_text(text)
 
-        self.message_label.setText(display_text)
-        self.timestamp_label.setText(datetime.now().strftime("%H:%M"))
-        self._update_size_hint()
+        try:
+            return self.renderer.render(text, mode=RenderMode.FINAL)
+        except Exception as e:
+            print(f"[MessageBubble] Markdown render failed, using plain text: {e}")
+            return self.renderer._escape_text(text)
 
     def append_text(self, additional_text: str, render_html: bool = False):
         """
@@ -1069,11 +1110,12 @@ class ModernMessageBubble(QWidget):
         self.current_text += additional_text
 
         # Determine if we should render markdown
+        # INFO type now supports markdown rendering (for system messages like initialization)
         should_render = (
             self.enable_markdown and
             render_html and
             self.bubble_type != BubbleType.USER_MESSAGE and
-            self.bubble_type not in [BubbleType.COMMAND_REQUEST, BubbleType.ERROR, BubbleType.INFO]
+            self.bubble_type not in [BubbleType.COMMAND_REQUEST, BubbleType.ERROR]
         )
 
         # For streaming: render incrementally if requested
@@ -1159,6 +1201,7 @@ class ModernChatBox(QWidget):
         # UI references
         self.current_stream_bubble = None
         self.last_command_bubble = None
+        self.command_bubbles = []  # Track all command bubbles for cleanup
         
         # Threading
         self.processing_worker = None
@@ -1789,12 +1832,23 @@ class ModernChatBox(QWidget):
 
     def _clean_response_text(self, response_text: str) -> str:
         """Clean response text by removing commands and duplicates"""
+        # Get command_start and command_separator from current AI instance (use config defaults as fallback)
+        cmd_start = ConversationConfig.command_start  # Use config default
+        cmd_sep = ConversationConfig.command_separator  # Use config default
+        if self.current_conversation:
+            ai_instance = self.context_manager.get_ai_for_conversation(self.current_conversation)
+            if ai_instance:
+                if hasattr(ai_instance, 'command_start'):
+                    cmd_start = ai_instance.command_start
+                if hasattr(ai_instance, 'command_separator'):
+                    cmd_sep = ai_instance.command_separator
+
         # Step 1: Remove all command lines
         lines = response_text.split('\n')
         cleaned_lines = []
         for line in lines:
-            # Skip command lines
-            if 'YLDEXECUTE:' in line or line.strip().startswith('￥|'):
+            # Skip command lines using configured command_start and command_separator
+            if cmd_start in line or line.strip().startswith(cmd_sep):
                 continue
             cleaned_lines.append(line)
 
@@ -1884,6 +1938,7 @@ class ModernChatBox(QWidget):
             bubble_type=BubbleType.COMMAND_REQUEST
         )
         self.last_command_bubble = command_bubble
+        self.command_bubbles.append(command_bubble)  # Track for cleanup
 
         # Execute command
         context = ProcessingContext(
@@ -1996,7 +2051,7 @@ class ModernChatBox(QWidget):
                     lines = clean_response.split('\n')
                     clean_response = '\n'.join([
                         line for line in lines
-                        if cmd_start not in line and not line.strip().startswith('YLDEXECUTE')
+                        if cmd_start not in line
                     ]).strip()
 
             full_response = f"{clean_response}\n\n{deduplicated_summary}" if clean_response else deduplicated_summary
@@ -2039,6 +2094,7 @@ class ModernChatBox(QWidget):
             ai_instance = self.context_manager.get_ai_for_conversation(self.current_conversation)
             if ai_instance and hasattr(ai_instance, 'command_start'):
                 cmd_start = ai_instance.command_start
+                cmd_sep = ai_instance.command_separator if hasattr(ai_instance, 'command_separator') else ConversationConfig.command_separator
 
                 # If this chunk contains a command marker
                 if cmd_start in chunk:
@@ -2078,17 +2134,19 @@ class ModernChatBox(QWidget):
                         bubble_type=BubbleType.COMMAND_REQUEST
                     )
                     self.last_command_bubble = command_bubble
+                    self.command_bubbles.append(command_bubble)  # Track for cleanup
                     print(f"[ChatBox] Created command bubble for: {command_text}")
 
                     # If there are more lines with commands, create additional bubbles
                     for i, line in enumerate(command_lines[1:], 1):
                         line = line.strip()
-                        if line and (cmd_start in line or line.startswith('￥|')):
+                        if line and (cmd_start in line or line.startswith(cmd_sep)):
                             # This is another command
                             additional_bubble = self._add_message_to_display(
                                 message=line,
                                 bubble_type=BubbleType.COMMAND_REQUEST
                             )
+                            self.command_bubbles.append(additional_bubble)  # Track for cleanup
                             print(f"[ChatBox] Created additional command bubble {i}: {line}")
 
                     # Don't display command content beyond the bubble
@@ -2140,7 +2198,7 @@ class ModernChatBox(QWidget):
                     # Check if this looks like real content (has substantial text, not just symbols)
                     has_real_content = (
                         len(chunk_clean) > 2 and
-                        not chunk_clean.startswith('￥|') and
+                        not chunk_clean.startswith(cmd_sep) and
                         not chunk_clean.startswith('》') and
                         not cmd_start in chunk_clean
                     )
@@ -2207,11 +2265,18 @@ class ModernChatBox(QWidget):
             summary: The summary text from AI
             full_response: The full response including cleaned original response
         """
-        # Remove intermediate bubbles (command execution bubbles)
-        # We need to remove the command bubble that was shown before
-        if self.last_command_bubble:
-            self._remove_bubble(self.last_command_bubble)
-            self.last_command_bubble = None
+        # Remove ALL intermediate bubbles (all command execution bubbles)
+        # This ensures only the final answer is visible, not the command history
+        print(f"[ChatBox] Removing {len(self.command_bubbles)} command bubbles before final summary")
+
+        for bubble in self.command_bubbles:
+            if bubble:
+                self._remove_bubble(bubble)
+                print(f"[ChatBox] Removed command bubble")
+
+        # Clear all bubble references
+        self.command_bubbles.clear()
+        self.last_command_bubble = None
 
         # Save and remove current streaming bubble if it exists
         if self.current_stream_bubble:
@@ -2410,6 +2475,7 @@ class ModernChatBox(QWidget):
         # Clear bubble references
         self.current_stream_bubble = None
         self.last_command_bubble = None
+        self.command_bubbles.clear()  # Clear all tracked command bubbles
     
     def _scroll_to_bottom(self):
         """Scroll to bottom of message area"""
@@ -2493,6 +2559,7 @@ class ModernChatBox(QWidget):
             self._clear_message_display()
             self.current_stream_bubble = None
             self.last_command_bubble = None
+            self.command_bubbles.clear()  # Clear all tracked command bubbles
 
             # Load AI for conversation
             self.context_manager.get_ai_for_conversation(conversation_name)

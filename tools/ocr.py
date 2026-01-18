@@ -1,4 +1,11 @@
-# Adapted from https://github.com/hiroi-sora/Umi-OCR/blob/main/docs/http/api_doc.md#/api/doc
+"""
+MCP OCR Module - Optical Character Recognition
+Adapted from https://github.com/hiroi-sora/Umi-OCR/blob/main/docs/http/api_doc.md#/api/doc
+
+IMPORTANT: When calling functions, pass ONLY the values, not parameter names.
+CORRECT: ocr_process_pictures("/home/user/image.png")
+WRONG: ocr_process_pictures(file_path="/home/user/image.png")
+"""
 
 import base64
 import os
@@ -7,34 +14,38 @@ import time
 import requests
 from urllib.request import urlopen
 
-def ocr_process_pdf(file_path: str, download_dir: str):
+
+def ocr_process_pdf(file_path: str, download_dir: str) -> str:
     """
-    Perform OCR text recognition on a local PDF file, output to the specified directory, and return the file path.
+    Perform OCR text recognition on a local PDF file, output to the specified directory,
+    and return the file path.
 
-    Args:
-        file_path (str, REQUIRED): Path to the PDF file to upload. Must be a PDF file.
-            Example: "/home/user/documents/report.pdf" or "C:\\Users\\user\\Documents\\report.pdf"
-            Note: If using Windows paths with backslashes, you must escape them: "C:\\\\Users\\\\user\\\\file.pdf"
+    Parameters:
+    - file_path: Path to the PDF file to process (string, required)
+      Must be a PDF file
+      Example: "/home/user/documents/report.pdf" or "C:\\Users\\user\\Documents\\report.pdf"
+      Note: If using Windows paths with backslashes, escape them: "C:\\\\Users\\\\user\\\\file.pdf"
 
-        download_dir (str, REQUIRED): Local directory path to save the output. This is only the directory path, not including the filename.
-            Example: "/home/user/downloads" or "C:\\Users\\user\\Downloads"
-            Note: Directory will be created if it does not exist.
+    - download_dir: Local directory path to save the output (string, required)
+      This is only the directory path, not including the filename
+      Example: "/home/user/downloads" or "C:\\Users\\user\\Downloads"
+      Note: Directory will be created if it does not exist
 
     Returns:
-        str: The absolute path where the successfully downloaded file is saved, including filename and extension.
+    - The absolute path where the successfully downloaded file is saved, including filename and extension (string)
 
     Raises:
-        Exception: When server connection fails or Umi-OCR is not running.
-        FileNotFoundError: When the source PDF file does not exist.
-        AssertionError: When the OCR task fails or returns an error code.
+    - Exception: When server connection fails or Umi-OCR is not running
+    - FileNotFoundError: When the source PDF file does not exist
+    - AssertionError: When the OCR task fails or returns an error code
 
-    Example:
-        ocr_process_pdf("/home/user/documents/report.pdf", "/home/user/ocr_output")
-        Returns: "/home/user/ocr_output/report.txt"
+    Example call:
+    ocr_process_pdf("/home/user/documents/report.pdf", "/home/user/ocr_output")
+    Returns: "/home/user/ocr_output/report.txt"
 
     Prerequisites:
-        - Umi-OCR must be running on http://127.0.0.1:1224
-        - Run the executable: .\\tools\\addition\\Umi-OCR\\Umi-OCR.exe
+    - Umi-OCR must be running on http://127.0.0.1:1224
+    - Run the executable: .\\tools\\addition\\Umi-OCR\\Umi-OCR.exe
     """
 
     base_url = "http://127.0.0.1:1224"
@@ -42,10 +53,9 @@ def ocr_process_pdf(file_path: str, download_dir: str):
         resp = urlopen(base_url)
         code = resp.getcode()
         if code != 200:
-            raise Exception(f"no Umi-OCR running or port not correct! run .\\tools\\addition\\Umi-OCR\\Umi-OCR.exe")
+            raise Exception(f"No Umi-OCR running or port not correct! Run .\\tools\\addition\\Umi-OCR\\Umi-OCR.exe")
     except Exception as e:
-        raise Exception(f'访问本地 Umi-OCR 失败: {str(e)}')
-
+        raise Exception(f'Failed to access local Umi-OCR: {str(e)}')
 
     url = "{}/api/doc/upload".format(base_url)
 
@@ -63,9 +73,9 @@ def ocr_process_pdf(file_path: str, download_dir: str):
     response.raise_for_status()
     res_data = json.loads(response.text)
     if res_data["code"] == 101:
-        # If code == 101, it indicates that the server did not receive the uploaded file.
-        # On some Linux systems, if file_name contains non-ASCII characters, this error might occur.
-        # In this case, we can specify a temp_name containing only ASCII characters to construct the upload request.
+        # If code == 101, indicates that the server did not receive the uploaded file
+        # On some Linux systems, if file_name contains non-ASCII characters, this error might occur
+        # In this case, specify a temp_name containing only ASCII characters to construct the upload request
 
         file_name = os.path.basename(file_path)
         file_prefix, file_suffix = os.path.splitext(file_name)
@@ -101,7 +111,6 @@ def ocr_process_pdf(file_path: str, download_dir: str):
         res_data = json.loads(response.text)
         assert res_data["code"] == 100, "Failed to get task status: {}".format(res_data)
 
-
         if res_data["is_done"]:
             state = res_data["state"]
             assert state == "success", "Task execution failed: {}".format(
@@ -110,7 +119,6 @@ def ocr_process_pdf(file_path: str, download_dir: str):
             break
 
     url = "{}/api/doc/download".format(base_url)
-
 
     download_options = {
         "file_types": [
@@ -127,7 +135,6 @@ def ocr_process_pdf(file_path: str, download_dir: str):
 
     url = res_data["data"]
     name = res_data["name"]
-
 
     if not os.path.exists(download_dir):
         os.makedirs(download_dir)
@@ -155,53 +162,52 @@ def ocr_process_pdf(file_path: str, download_dir: str):
     return download_path
 
 
-
-def ocr_process_pictures(file_path: str):
-
+def ocr_process_pictures(file_path: str) -> list:
     """
     Perform OCR text recognition on a local image file and return the recognized content.
 
-    Args:
-        file_path (str, REQUIRED): Path to the image file to process.
-            Example: "/home/user/pictures/screenshot.png" or "C:\\Users\\user\\Pictures\\scan.jpg"
-            Note: If using Windows paths with backslashes, you must escape them: "C:\\\\Users\\\\user\\\\image.png"
-            Supported formats: PNG, JPG, JPEG, BMP, etc.
+    Parameters:
+    - file_path: Path to the image file to process (string, required)
+      Example: "/home/user/pictures/screenshot.png" or "C:\\Users\\user\\Pictures\\scan.jpg"
+      Note: If using Windows paths with backslashes, escape them: "C:\\\\Users\\\\user\\\\image.png"
+      Supported formats: PNG, JPG, JPEG, BMP, etc.
 
     Returns:
-        list: A list of OCR result dictionaries. Each dictionary contains:
-            - text (str): Recognized text content
-            - score (float): Confidence score (0~1)
-            - box (list): XY coordinates of four corners of the text box in clockwise order: [top-left, top-right, bottom-right, bottom-left]
-            - end (str): End character for this line of text based on layout analysis. May be empty, space " ", or newline "\\n"
+    - A list of OCR result dictionaries (list)
+      Each dictionary contains:
+      - text (str): Recognized text content
+      - score (float): Confidence score (0~1)
+      - box (list): XY coordinates of four corners of the text box in clockwise order: [top-left, top-right, bottom-right, bottom-left]
+      - end (str): End character for this line of text based on layout analysis. May be empty, space " ", or newline "\\n"
 
-            To reconstruct complete paragraphs from OCR text blocks, concatenate in the format:
-            current_line_text + current_line_end + next_line_text + next_line_end + ...
+      To reconstruct complete paragraphs from OCR text blocks, concatenate in the format:
+      current_line_text + current_line_end + next_line_text + next_line_end + ...
 
     Raises:
-        FileNotFoundError: When the image file does not exist.
-        Exception: When Umi-OCR server connection fails or returns an error.
-        ValueError: When the image format is not supported.
+    - FileNotFoundError: When the image file does not exist
+    - Exception: When Umi-OCR server connection fails or returns an error
+    - ValueError: When the image format is not supported
 
-    Example:
-        ocr_process_pictures("/home/user/images/receipt.png")
-        Returns: [
-            {
-                "text": "Total: $25.99",
-                "score": 0.98,
-                "box": [[100, 200], [300, 200], [300, 220], [100, 220]],
-                "end": "\\n"
-            },
-            {
-                "text": "Thank you for shopping",
-                "score": 0.95,
-                "box": [[100, 230], [350, 230], [350, 250], [100, 250]],
-                "end": ""
-            }
-        ]
+    Example call:
+    ocr_process_pictures("/home/user/images/receipt.png")
+    Returns: [
+        {
+            "text": "Total: $25.99",
+            "score": 0.98,
+            "box": [[100, 200], [300, 200], [300, 220], [100, 220]],
+            "end": "\\n"
+        },
+        {
+            "text": "Thank you for shopping",
+            "score": 0.95,
+            "box": [[100, 230], [350, 230], [350, 250], [100, 250]],
+            "end": ""
+        }
+    ]
 
     Prerequisites:
-        - Umi-OCR must be running on http://127.0.0.1:1224
-        - Run the executable: .\\tools\\addition\\Umi-OCR\\Umi-OCR.exe
+    - Umi-OCR must be running on http://127.0.0.1:1224
+    - Run the executable: .\\tools\\addition\\Umi-OCR\\Umi-OCR.exe
     """
 
     with open(file_path,'rb') as f:
@@ -220,6 +226,3 @@ def ocr_process_pictures(file_path: str):
     response.raise_for_status()
     res_dict = json.loads(response.text)
     return res_dict["data"]
-
-# if __name__ == "__main__":
-#     ocr_process_pictures("C:\\Users\\2300\\Desktop\\mcpPro\\DeepseekDesktop\\tools\\addition\\Umi-OCR\\test.png")

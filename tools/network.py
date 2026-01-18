@@ -1,190 +1,227 @@
+"""
+MCP Network Operations Module
+
+IMPORTANT: When calling functions, pass ONLY the values, not parameter names.
+CORRECT: download_document("https://example.com/file.pdf", "/home/user/downloads/file.pdf")
+WRONG: download_document(url="https://example.com/file.pdf", save_path="/home/user/downloads/file.pdf")
+"""
+
 import urllib.request
 import os
-
-def download_document(url: str, save_path: str) -> str:
-    """
-    从指定URL下载文档到本地
-    
-    Args:
-        url: 要下载的文档URL，必须以http://或https://开头
-        save_path: 本地保存路径，包括文件名和扩展名
-        
-    Returns:
-        str: 下载成功的文件保存路径
-        如果有“\\”符号，必须使用转义符号！！！
-        "C:\\Users\\2300\\Desktop\\new.png"是正确的
-        
-    Raises:
-        ValueError: URL格式错误或保存路径无效
-        Exception: 下载失败或文件保存失败
-    """
-    # 参数验证
-    if not url.startswith(('http://', 'https://')):
-        raise ValueError('URL必须以http://或https://开头')
-    
-    if not save_path or not save_path.strip():
-        raise ValueError('保存路径不能为空')
-    
-    # 确保保存目录存在
-    save_dir = os.path.dirname(save_path)
-    if save_dir and not os.path.exists(save_dir):
-        os.makedirs(save_dir, exist_ok=True)
-    
-    try:
-        # 下载文件
-        urllib.request.urlretrieve(url, save_path)
-        
-        # 验证文件是否成功下载
-        if os.path.exists(save_path) and os.path.getsize(save_path) > 0:
-            return save_path
-        else:
-            raise Exception('文件下载后大小为0或文件不存在')
-            
-    except Exception as e:
-        raise Exception(f'下载失败: {str(e)}')
-
-
-
-def save_webpage_with_cookie(url: str, save_path: str, cookie: str) -> str:
-    """
-    使用指定的Cookie访问网页并保存网页源代码
-    
-    Args:
-        url: 要访问的网页URL
-        save_path: 本地保存路径，包括文件名（建议使用.html扩展名）
-        cookie: Cookie字符串，格式如 "name=value; name2=value2"
-        
-    Returns:
-        str: 保存成功的文件路径
-        
-    Raises:
-        ValueError: 参数无效
-        Exception: 访问失败或保存失败
-    """
-    # 参数验证
-    if not url.startswith(('http://', 'https://')):
-        raise ValueError('URL必须以http://或https://开头')
-    
-    if not save_path or not save_path.strip():
-        raise ValueError('保存路径不能为空')
-    
-    if not cookie or not cookie.strip():
-        raise ValueError('Cookie不能为空')
-    
-    # 确保保存目录存在
-    save_dir = os.path.dirname(save_path)
-    if save_dir and not os.path.exists(save_dir):
-        os.makedirs(save_dir, exist_ok=True)
-    
-    try:
-        # 创建请求对象
-        request = urllib.request.Request(url)
-        
-        # 添加Cookie到请求头
-        request.add_header('Cookie', cookie)
-        
-        # 添加User-Agent，模拟浏览器访问
-        request.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
-        
-        # 发送请求并获取响应
-        response = urllib.request.urlopen(request)
-        
-        # 读取网页源代码（二进制数据）
-        webpage_content = response.read()
-        
-        # 将网页源代码保存到文件（二进制写入）
-        with open(save_path, 'wb') as file:
-            file.write(webpage_content)
-        
-        # 验证文件是否成功保存
-        if os.path.exists(save_path) and os.path.getsize(save_path) > 0:
-            return save_path
-        else:
-            raise Exception('文件保存后大小为0或文件不存在')
-            
-    except Exception as e:
-        raise Exception(f'访问网页失败: {str(e)}')
-
-
-import urllib.request
 import urllib.parse
 import socket
 import re
 from typing import Optional
 
+
+def download_document(url: str, save_path: str) -> str:
+    """
+    Download a document from the specified URL to local storage.
+
+    Parameters:
+    - url: The URL to download from (string, required)
+      Must start with http:// or https://
+      Example: "https://example.com/document.pdf"
+
+    - save_path: Local save path including filename and extension (string, required)
+      Example: "/home/user/downloads/file.pdf" or "C:\\Users\\user\\Downloads\\file.pdf"
+      Note: If path contains backslashes, escape them: "C:\\\\Users\\\\user\\\\file.pdf"
+
+    Returns:
+    - File save path on successful download (string)
+
+    Raises:
+    - ValueError: URL format error or invalid save path
+    - Exception: Download failed or file save failed
+
+    Example call:
+    download_document("https://example.com/file.pdf", "/home/user/downloads/file.pdf")
+    Returns: "/home/user/downloads/file.pdf"
+    """
+    # Parameter validation
+    if not url.startswith(('http://', 'https://')):
+        raise ValueError('URL must start with http:// or https://')
+
+    if not save_path or not save_path.strip():
+        raise ValueError('Save path cannot be empty')
+
+    # Ensure save directory exists
+    save_dir = os.path.dirname(save_path)
+    if save_dir and not os.path.exists(save_dir):
+        os.makedirs(save_dir, exist_ok=True)
+
+    try:
+        # Download file
+        urllib.request.urlretrieve(url, save_path)
+
+        # Verify file was downloaded successfully
+        if os.path.exists(save_path) and os.path.getsize(save_path) > 0:
+            return save_path
+        else:
+            raise Exception('Downloaded file size is 0 or file does not exist')
+
+    except Exception as e:
+        raise Exception(f'Download failed: {str(e)}')
+
+
+def save_webpage_with_cookie(url: str, save_path: str, cookie: str) -> str:
+    """
+    Access a webpage with specified cookie and save the webpage source code.
+
+    Parameters:
+    - url: The webpage URL to access (string, required)
+      Must start with http:// or https://
+      Example: "https://example.com/page"
+
+    - save_path: Local save path including filename (string, required)
+      Use .html extension for webpages
+      Example: "/home/user/webpage.html" or "C:\\Users\\user\\page.html"
+
+    - cookie: Cookie string (string, required)
+      Format: "name=value; name2=value2"
+      Example: "session_id=abc123; user_token=xyz789"
+
+    Returns:
+    - Saved file path (string)
+
+    Raises:
+    - ValueError: Invalid parameters
+    - Exception: Access failed or save failed
+
+    Example call:
+    save_webpage_with_cookie("https://example.com", "/home/user/page.html", "session=abc")
+    Returns: "/home/user/page.html"
+    """
+    # Parameter validation
+    if not url.startswith(('http://', 'https://')):
+        raise ValueError('URL must start with http:// or https://')
+
+    if not save_path or not save_path.strip():
+        raise ValueError('Save path cannot be empty')
+
+    if not cookie or not cookie.strip():
+        raise ValueError('Cookie cannot be empty')
+
+    # Ensure save directory exists
+    save_dir = os.path.dirname(save_path)
+    if save_dir and not os.path.exists(save_dir):
+        os.makedirs(save_dir, exist_ok=True)
+
+    try:
+        # Create request object
+        request = urllib.request.Request(url)
+
+        # Add cookie to request header
+        request.add_header('Cookie', cookie)
+
+        # Add User-Agent to simulate browser access
+        request.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+
+        # Send request and get response
+        response = urllib.request.urlopen(request)
+
+        # Read webpage source code (binary data)
+        webpage_content = response.read()
+
+        # Save webpage source code to file (binary write)
+        with open(save_path, 'wb') as file:
+            file.write(webpage_content)
+
+        # Verify file was saved successfully
+        if os.path.exists(save_path) and os.path.getsize(save_path) > 0:
+            return save_path
+        else:
+            raise Exception('Saved file size is 0 or file does not exist')
+
+    except Exception as e:
+        raise Exception(f'Webpage access failed: {str(e)}')
+
+
 def extract_links(html_content: str, base_url: str) -> list:
     """
-    从HTML内容中提取所有外部链接
-    
-    Args:
-        html_content: HTML内容字符串
-        base_url: 基础URL，用于处理相对链接
-        
+    Extract all external links from HTML content.
+
+    Parameters:
+    - html_content: HTML content string (string, required)
+      Example: "<html><a href='https://example.com'>Link</a></html>"
+
+    - base_url: Base URL for resolving relative links (string, required)
+      Example: "https://example.com/page"
+
     Returns:
-        list: 提取到的所有外链列表
+    - List of all extracted external links (list)
+
+    Example call:
+    extract_links("<a href='link1'>...</a>", "https://example.com")
+    Returns: ["https://example.com/link1"]
     """
     links = []
-    
-    # 使用正则表达式提取所有链接（a标签的href属性）
+
+    # Use regex to extract all links (href attribute in a tags)
     link_patterns = [
-        r'href=["\']([^"\']+)["\']',  # 匹配 href="..." 或 href='...'
-        r'href=([^\s>]+)'  # 匹配 href=... (没有引号的情况)
+        r'href=["\']([^"\']+)["\']',  # Match href="..." or href='...'
+        r'href=([^\s>]+)'  # Match href=... (without quotes)
     ]
-    
+
     for pattern in link_patterns:
         matches = re.findall(pattern, html_content, re.IGNORECASE)
         for match in matches:
-            # 清理链接（去除可能的空格和特殊字符）
+            # Clean link (remove possible spaces and special characters)
             link = match.strip()
-            
-            # 跳过空链接、锚点链接和JavaScript链接
-            if (not link or 
-                link.startswith('#') or 
+
+            # Skip empty links, anchor links, and JavaScript links
+            if (not link or
+                link.startswith('#') or
                 link.lower().startswith('javascript:') or
                 link.lower().startswith('mailto:')):
                 continue
-            
-            # 处理相对链接（转换为绝对链接）
+
+            # Handle relative links (convert to absolute links)
             if not link.startswith(('http://', 'https://', '//')):
                 try:
-                    # 使用urllib解析并拼接链接
+                    # Use urllib to parse and join links
                     link = urllib.parse.urljoin(base_url, link)
                 except:
-                    # 如果解析失败，跳过这个链接
+                    # If parsing fails, skip this link
                     continue
-            
-            # 去重并添加到列表
+
+            # Add to list (deduplicated)
             if link not in links:
                 links.append(link)
-    
-    # 返回排序后的链接列表
+
+    # Return sorted link list
     return sorted(links)
 
 
 def validate_url(url: str) -> bool:
     """
-    验证URL格式是否正确
-    
-    Args:
-        url: 要验证的URL
-        
+    Validate if URL format is correct.
+
+    Parameters:
+    - url: The URL to validate (string, required)
+      Example: "https://example.com"
+
     Returns:
-        bool: URL是否有效
+    - True if URL is valid, False otherwise (boolean)
+
+    Example call:
+    validate_url("https://example.com")
+    Returns: True
     """
     if not url or not isinstance(url, str):
         return False
-    
-    # 检查是否以http或https开头
+
+    # Check if starts with http or https
     if not url.startswith(('http://', 'https://')):
         return False
-    
-    # 尝试解析URL
+
+    # Try to parse URL
     try:
         parsed = urllib.parse.urlparse(url)
-        # 确保有网络位置（netloc）
+        # Ensure there's a network location (netloc)
         if not parsed.netloc:
             return False
-        # 确保有scheme
+        # Ensure there's a scheme
         if not parsed.scheme:
             return False
         return True
@@ -194,189 +231,204 @@ def validate_url(url: str) -> bool:
 
 def read_page(url: str, timeout: Optional[float] = None) -> str:
     """
-    阅读指定URL的所有文本，返回该链接指向网页中的所有的文本、外链。
-    添加了超时限制，避免长时间等待。
-    
-    Args:
-        url: 要下载的文档URL，必须以http://或https://开头
-        timeout: 超时时间（秒），None表示使用系统默认值
-        
+    Read all text from the specified URL and return all text and external links from the webpage.
+    Adds timeout limit to avoid long waits.
+
+    Parameters:
+    - url: The URL to read from (string, required)
+      Must start with http:// or https://
+      Example: "https://example.com"
+
+    - timeout: Timeout in seconds (float or None, optional, defaults to system default)
+      Example: 10.0 or None
+
     Returns:
-        str: 返回该链接指向网页中的所有的文本、外链
-        
+    - All text and external links from the webpage (string)
+
     Raises:
-        ValueError: URL格式错误或无法访问
-        TimeoutError: 请求超时
-        Exception: 网页读取失败
+    - ValueError: URL format error or unable to access
+    - TimeoutError: Request timeout
+    - Exception: Webpage read failed
+
+    Example call:
+    read_page("https://example.com", 10.0)
+    Returns: Webpage text content and links
     """
-    # 使用更严格的URL验证
+    # Use stricter URL validation
     if not validate_url(url):
-        raise ValueError(f'URL格式无效: {url}')
-    
+        raise ValueError(f'Invalid URL format: {url}')
+
     try:
-        # 创建请求对象，添加User-Agent模拟浏览器
+        # Create request object, add User-Agent to simulate browser
         request = urllib.request.Request(url)
         request.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
         request.add_header('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8')
         request.add_header('Accept-Language', 'zh-CN,zh;q=0.9,en;q=0.8')
-        
-        # 设置全局socket超时
+
+        # Set global socket timeout
         if timeout:
             socket.setdefaulttimeout(timeout)
-        
-        # 发送请求并获取响应
+
+        # Send request and get response
         try:
             response = urllib.request.urlopen(request, timeout=timeout)
         except Exception as e:
-            # 尝试更详细的错误信息
-            raise ConnectionError(f'无法连接到 {url}: {str(e)}')
-        
-        # 检查响应状态码
+            # Try more detailed error message
+            raise ConnectionError(f'Cannot connect to {url}: {str(e)}')
+
+        # Check response status code
         if response.getcode() != 200:
-            raise ConnectionError(f'服务器返回状态码: {response.getcode()}')
-        
-        # 读取网页内容（尝试多种编码）
+            raise ConnectionError(f'Server returned status code: {response.getcode()}')
+
+        # Read webpage content (try multiple encodings)
         html_bytes = response.read()
-        
-        # 尝试多种编码
+
+        # Try multiple encodings
         encodings = ['utf-8', 'gbk', 'gb2312', 'latin-1']
         html_content = None
-        
+
         for encoding in encodings:
             try:
                 html_content = html_bytes.decode(encoding)
                 break
             except UnicodeDecodeError:
                 continue
-        
+
         if html_content is None:
-            # 如果所有编码都失败，使用'latin-1'（不会失败，但可能乱码）
+            # If all encodings fail, use 'latin-1' (won't fail, but may be garbled)
             html_content = html_bytes.decode('latin-1', errors='ignore')
-        
-        # 提取所有文本（去除HTML标签）
-        # 首先去除script和style标签及其内容
+
+        # Extract all text (remove HTML tags)
+        # First remove script and style tags and their content
         cleaned_html = re.sub(r'<script.*?>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
         cleaned_html = re.sub(r'<style.*?>.*?</style>', '', cleaned_html, flags=re.DOTALL | re.IGNORECASE)
-        
-        # 去除所有HTML标签
+
+        # Remove all HTML tags
         text_only = re.sub(r'<[^>]+>', ' ', cleaned_html)
-        
-        # 去除多余的空白字符（多个空格、换行等）
+
+        # Remove excess whitespace (multiple spaces, newlines, etc.)
         text_only = re.sub(r'\s+', ' ', text_only)
         text_only = text_only.strip()
-        
-        # 提取所有外链
+
+        # Extract all external links
         links = extract_links(html_content, url)
-        
-        # 格式化输出
+
+        # Format output
         result = []
         result.append("=" * 50)
-        result.append(f"网页内容 (URL: {url})")
-        result.append(f"超时设置: {timeout if timeout else '默认'}秒")
+        result.append(f"Webpage Content (URL: {url})")
+        result.append(f"Timeout setting: {timeout if timeout else 'default'} seconds")
         result.append("=" * 50)
-        result.append("网页文本内容")
+        result.append("Webpage text content")
         result.append("-" * 30)
-        result.append(text_only[:5000])  # 限制文本长度，避免太长
-        
+        result.append(text_only[:5000])  # Limit text length to avoid too long
+
         if len(text_only) > 5000:
-            result.append(f"\n...（文本过长，已截断，实际长度：{len(text_only)} 字符）")
-        
+            result.append(f"\n... (text too long, truncated, actual length: {len(text_only)} characters)")
+
         result.append("\n" + "-" * 30)
-        result.append("外链列表")
+        result.append("External links list")
         result.append("-" * 30)
-        
+
         if links:
-            for i, link in enumerate(links[:15], 1):  # 限制显示前15个链接
+            for i, link in enumerate(links[:15], 1):  # Limit to first 15 links
                 result.append(f"{i}. {link}")
             if len(links) > 15:
-                result.append(f"...（共{len(links)}个链接，显示前15个）")
+                result.append(f"... (total {len(links)} links, showing first 15)")
         else:
-            result.append("未找到外链")
-        
+            result.append("No external links found")
+
         result.append("=" * 50)
-        
+
         return "\n".join(result)
-        
+
     except socket.timeout:
-        raise TimeoutError(f'请求超时: 在{timeout}秒内未完成')
-    except urllib.error.URLError as e: # pyright: ignore[reportAttributeAccessIssue]
+        raise TimeoutError(f'Request timeout: Did not complete within {timeout} seconds')
+    except urllib.error.URLError as e:  # pyright: ignore[reportAttributeAccessIssue]
         if isinstance(e.reason, socket.timeout):
-            raise TimeoutError(f'请求超时: 在{timeout}秒内未完成')
+            raise TimeoutError(f'Request timeout: Did not complete within {timeout} seconds')
         else:
-            raise ConnectionError(f'无法访问URL: {str(e)}')
+            raise ConnectionError(f'Cannot access URL: {str(e)}')
     except Exception as e:
-        raise Exception(f'网页读取失败: {str(e)}')
+        raise Exception(f'Webpage read failed: {str(e)}')
 
 
 def search_baidu(query: str, max_results: int = 5, timeout: float = 10.0) -> str:
     """
-    使用百度搜索关键词，返回搜索结果的页面内容
-    添加超时限制
-    
-    Args:
-        query: 搜索关键词
-        max_results: 每页显示的结果数量
-        timeout: 超时时间（秒）
-        
+    Use Baidu to search for keywords and return search result page content.
+    Adds timeout limit.
+
+    Parameters:
+    - query: Search keyword (string, required)
+      Example: "Python tutorial"
+
+    - max_results: Number of results per page (integer, optional, defaults to 5)
+      Example: 10
+
+    - timeout: Timeout in seconds (float, optional, defaults to 10.0)
+      Example: 15.0
+
     Returns:
-        str: 百度搜索结果的页面内容
-        
+    - Baidu search result page content (string)
+
     Raises:
-        ValueError: 查询关键词为空或无效
-        Exception: 搜索失败
+    - ValueError: Query keyword is empty or invalid
+    - Exception: Search failed
+
+    Example call:
+    search_baidu("Python", 5, 10.0)
+    Returns: Baidu search results
     """
-    # 参数验证
+    # Parameter validation
     if not query or not query.strip():
-        raise ValueError('搜索关键词不能为空')
-    
+        raise ValueError('Search keyword cannot be empty')
+
     if timeout <= 0:
-        timeout = 10.0  # 默认10秒
-    
+        timeout = 10.0  # Default 10 seconds
+
     try:
-        # 对查询词进行URL编码
+        # URL encode the query
         encoded_query = urllib.parse.quote(query)
-        
-        # 构建百度搜索URL
+
+        # Build Baidu search URL
         search_url = f"https://www.baidu.com/s?ie=UTF-8&wd={encoded_query}&rn={max_results}"
-        
-        # 调用read_page函数，传入超时参数
+
+        # Call read_page function with timeout parameter
         search_results = read_page(search_url, timeout)
-        
-        # 添加搜索信息到返回内容
-        result_text = f"百度搜索关键词: {query}\n"
-        result_text += f"搜索URL: {search_url}\n"
-        result_text += f"超时设置: {timeout}秒\n"
+
+        # Add search info to return content
+        result_text = f"Baidu search keyword: {query}\n"
+        result_text += f"Search URL: {search_url}\n"
+        result_text += f"Timeout setting: {timeout} seconds\n"
         result_text += search_results
-        
+
         return result_text
-        
+
     except TimeoutError:
-        raise TimeoutError(f'百度搜索超时: 在{timeout}秒内未完成')
+        raise TimeoutError(f'Baidu search timeout: Did not complete within {timeout} seconds')
     except Exception as e:
-        raise Exception(f'百度搜索失败: {str(e)}')
+        raise Exception(f'Baidu search failed: {str(e)}')
 
 
 def test_connection():
-    """测试网络连接"""
-    print("=== 测试网络连接 ===")
-    
+    """Test network connection"""
+    print("=== Testing Network Connection ===")
+
     test_urls = [
-        ("百度", "https://www.baidu.com"),
-        ("示例网站", "https://example.com"),
-        ("Python官网", "https://www.python.org"),
+        ("Baidu", "https://www.baidu.com"),
+        ("Example site", "https://example.com"),
+        ("Python official site", "https://www.python.org"),
     ]
-    
+
     for name, url in test_urls:
         try:
-            print(f"测试连接: {name} ({url})")
+            print(f"Testing connection: {name} ({url})")
             result = read_page(url, timeout=5)
-            print(f"  ✓ 连接成功")
-            print(f"  文本预览: {result[:100]}...\n")
+            print(f"  ✓ Connection successful")
+            print(f"  Text preview: {result[:100]}...\n")
         except TimeoutError as e:
-            print(f"  ✗ 连接超时: {e}\n")
+            print(f"  ✗ Connection timeout: {e}\n")
         except ConnectionError as e:
-            print(f"  ✗ 连接错误: {e}\n")
+            print(f"  ✗ Connection error: {e}\n")
         except Exception as e:
-            print(f"  ✗ 错误: {e}\n")
-
-
+            print(f"  ✗ Error: {e}\n")

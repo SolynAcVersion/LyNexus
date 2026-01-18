@@ -10,11 +10,21 @@ chathistory/
 /.vscode/
 /.claude/
 /conversations/
+
+# Data directory - all chat data is stored here
+# Structure: data/{chat_name}/
+#   - settings.json: Chat settings (without API keys)
+#   - chat_his.pickle: Chat display history
+#   - {chat_name}_ai.json: AI conversation history
+#   - tools/: MCP tools for this chat
 /data/
+
 # Virtual environments
 .venv
 
+# Old directories (no longer used, kept for backward compatibility during transition)
 ai_conv/
+chathistory/
 
 .confignore
 
