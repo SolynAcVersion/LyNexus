@@ -1755,7 +1755,7 @@ class ModernChatBox(QWidget):
         """Handle streaming result from thread pool"""
         try:
             result = future.result()
-            print(f"[ChatBox] Streaming result received: {result}")
+            # Removed verbose debug print to reduce terminal clutter
 
             if not result['success']:
                 self._handle_processing_error(result.get('error', 'Unknown error'))
@@ -1806,8 +1806,9 @@ class ModernChatBox(QWidget):
                     # Update with final summary only and finalize markdown rendering
                     self.current_stream_bubble.update_text(display_text)
                     self.current_stream_bubble.finalize_rendering()
-                    # Save the final bubble content
-                    self._save_chat_record(display_text, False)
+                    # Save the final bubble content with correct bubble type
+                    bubble_type = self.current_stream_bubble.bubble_type
+                    self._save_chat_record(display_text, False, bubble_type)
                 else:
                     # No display text but have bubble, save its current content
                     if hasattr(self.current_stream_bubble, 'message_label'):
@@ -1817,7 +1818,8 @@ class ModernChatBox(QWidget):
                             doc = QTextDocument()
                             doc.setHtml(bubble_text)
                             plain_text = doc.toPlainText()
-                            self._save_chat_record(plain_text, False)
+                            bubble_type = self.current_stream_bubble.bubble_type
+                            self._save_chat_record(plain_text, False, bubble_type)
             else:
                 # Should have been created via streaming chunks
                 print("[ChatBox] No stream bubble found, showing final response")
@@ -1861,13 +1863,13 @@ class ModernChatBox(QWidget):
             # Take only the last "最终总结" section
             text = '**最终总结**' + parts[-1]
 
-        # Step 3: Clean up extra whitespace and ensure proper formatting
+        # Step 3: Clean up extra whitespace while preserving newlines
         lines = text.split('\n')
         final_lines = []
         prev_empty = False
 
         for line in lines:
-            stripped = line.strip()
+            stripped = line.rstrip()  # Only strip trailing whitespace, preserve leading
             if stripped:
                 final_lines.append(stripped)
                 prev_empty = False
@@ -1877,10 +1879,10 @@ class ModernChatBox(QWidget):
                 prev_empty = True
 
         # Step 4: Rejoin with proper line breaks
-        display_text = '\n'.join(final_lines).strip()
+        display_text = '\n'.join(final_lines)
 
-        # Remove any trailing whitespace and ensure single newline at end
-        display_text = display_text.replace('\n\n\n', '\n\n')
+        # Remove any trailing whitespace
+        display_text = display_text.rstrip()
 
         return display_text
     
@@ -2112,7 +2114,8 @@ class ModernChatBox(QWidget):
                                 doc = QTextDocument()
                                 doc.setHtml(bubble_text)
                                 plain_text = doc.toPlainText()
-                                self._save_chat_record(plain_text, False)
+                                bubble_type = self.current_stream_bubble.bubble_type
+                                self._save_chat_record(plain_text, False, bubble_type)
                                 print(f"[ChatBox] Saved pre-command content: {plain_text[:50]}...")
 
                         print("[ChatBox] Removing bubble that had content before command")
@@ -2170,6 +2173,32 @@ class ModernChatBox(QWidget):
                         if not chunk_clean:
                             return
 
+                    # Check if this is a command result (terminal output, file listing, etc.)
+                    # Command results are typically:
+                    # 1. Starting with "Execution successful" or similar
+                    # 2. Multi-line text without markdown formatting
+                    # 3. File listings, directory contents
+                    # 4. Raw terminal output
+                    is_command_result = (
+                        chunk_clean.startswith('Execution successful') or
+                        chunk_clean.startswith('Execution failed') or
+                        chunk_clean.startswith('【执行结果')
+                    )
+
+                    if is_command_result:
+                        print(f"[ChatBox] ✓✓✓ COMMAND RESULT DETECTED ✓✓✓")
+                        print(f"[ChatBox] Result preview: {chunk_clean[:150]}...")
+                        # 创建命令结果气泡
+                        result_bubble = self._add_message_to_display(
+                            message=chunk_clean,
+                            bubble_type=BubbleType.COMMAND_RESULT
+                        )
+                        self.command_bubbles.append(result_bubble)  # Track for cleanup
+                        # Still in command mode, wait for real content
+                        QApplication.processEvents()
+                        self._scroll_to_bottom()
+                        return
+
                     # Check if this is an error message
                     is_error = (
                         '错误' in chunk_clean or
@@ -2197,7 +2226,7 @@ class ModernChatBox(QWidget):
                     # exit command mode and start displaying
                     # Check if this looks like real content (has substantial text, not just symbols)
                     has_real_content = (
-                        len(chunk_clean) > 2 and
+                        len(chunk_clean) >= 1 and  # Even 1 char is OK for streaming
                         not chunk_clean.startswith(cmd_sep) and
                         not chunk_clean.startswith('》') and
                         not cmd_start in chunk_clean
@@ -2256,7 +2285,7 @@ class ModernChatBox(QWidget):
         # Apply final markdown rendering
         bubble.finalize_rendering()
 
-        self._save_chat_record(response, False)
+        self._save_chat_record(response, False, BubbleType.AI_RESPONSE)
     
     def _show_final_summary(self, summary: str, full_response: str = ""):
         """Show final summary bubble with markdown rendering
@@ -2290,7 +2319,8 @@ class ModernChatBox(QWidget):
                     doc = QTextDocument()
                     doc.setHtml(bubble_text)
                     plain_text = doc.toPlainText()
-                    self._save_chat_record(plain_text, False)
+                    bubble_type = self.current_stream_bubble.bubble_type
+                    self._save_chat_record(plain_text, False, bubble_type)
                     print(f"[ChatBox] Saved streaming content before summary: {plain_text[:50]}...")
 
             self._remove_bubble(self.current_stream_bubble)
@@ -2307,16 +2337,16 @@ class ModernChatBox(QWidget):
         # Apply final markdown rendering
         bubble.finalize_rendering()
 
-        self._save_chat_record(f"Task completed:\n{display_text}", False)
-    
+        self._save_chat_record(f"Task completed:\n{display_text}", False, BubbleType.FINAL_SUMMARY)
+
     def _handle_processing_error(self, error_text: str):
         """Handle processing error"""
         self._add_message_to_display(
             message=f"❌ Error:\n{error_text}",
             bubble_type=BubbleType.ERROR
         )
-        
-        self._save_chat_record(f"Error:\n{error_text}", False)
+
+        self._save_chat_record(f"Error:\n{error_text}", False, BubbleType.ERROR)
         self._reset_state()
     
     def _reset_state(self):
@@ -2483,15 +2513,47 @@ class ModernChatBox(QWidget):
         if scrollbar:
             scrollbar.setValue(scrollbar.maximum())
     
-    def _save_chat_record(self, text: str, is_sender: bool):
-        """Save chat record"""
+    def _save_chat_record(self, text: str, is_sender: bool, bubble_type: BubbleType = BubbleType.AI_RESPONSE):
+        """Save chat record with bubble type
+
+        Args:
+            text: Message text
+            is_sender: Whether this is a user message
+            bubble_type: Type of bubble for correct color restoration
+        """
         self.chat_records[self.current_conversation].append({
             "text": text,
             "is_sender": is_sender,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "bubble_type": bubble_type.value  # Save as integer
         })
-        
+
         self.config_manager.save_chat_history(self.chat_records)
+
+    def _detect_bubble_type(self, text: str, is_sender: bool) -> BubbleType:
+        """Detect bubble type from text content (fallback for old records)
+
+        Args:
+            text: Message text
+            is_sender: Whether this is a user message
+
+        Returns:
+            Detected bubble type
+        """
+        if is_sender:
+            return BubbleType.USER_MESSAGE
+        elif "执行命令" in text or "Executing command" in text:
+            return BubbleType.COMMAND_REQUEST
+        elif "执行结果" in text or "Command executed" in text:
+            return BubbleType.COMMAND_RESULT
+        elif "任务完成" in text or "Task completed" in text:
+            return BubbleType.FINAL_SUMMARY
+        elif "错误" in text or "Error" in text:
+            return BubbleType.ERROR
+        elif "Processing" in text:
+            return BubbleType.INFO
+        else:
+            return BubbleType.AI_RESPONSE
     
     def _update_status_bar(self):
         """Update status bar"""
@@ -2598,26 +2660,25 @@ class ModernChatBox(QWidget):
                         time_str = datetime.now().strftime("%H:%M")
                 else:
                     time_str = datetime.now().strftime("%H:%M")
-                
-                # Determine bubble type
+
+                # Get message properties
                 is_sender = msg.get("is_sender", False)
                 text = msg.get("text", "")
-                
-                if is_sender:
-                    bubble_type = BubbleType.USER_MESSAGE
-                elif "执行命令" in text or "Executing command" in text:
-                    bubble_type = BubbleType.COMMAND_REQUEST
-                elif "执行结果" in text or "Command executed" in text:
-                    bubble_type = BubbleType.COMMAND_RESULT
-                elif "任务完成" in text or "Task completed" in text:
-                    bubble_type = BubbleType.FINAL_SUMMARY
-                elif "错误" in text or "Error" in text:
-                    bubble_type = BubbleType.ERROR
-                elif "Processing" in text:
-                    bubble_type = BubbleType.INFO
+
+                # Try to get bubble_type from saved data first
+                saved_bubble_type = msg.get("bubble_type")
+
+                if saved_bubble_type is not None:
+                    # Use saved bubble type
+                    try:
+                        bubble_type = BubbleType(saved_bubble_type)
+                    except:
+                        # Invalid bubble type value, fall back to detection
+                        bubble_type = self._detect_bubble_type(text, is_sender)
                 else:
-                    bubble_type = BubbleType.AI_RESPONSE
-                
+                    # No saved bubble type, detect from text (for old records)
+                    bubble_type = self._detect_bubble_type(text, is_sender)
+
                 # Create bubble
                 bubble = ModernMessageBubble(text, bubble_type, time_str)
                 self.message_layout.insertWidget(self.message_layout.count() - 1, bubble)

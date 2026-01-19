@@ -1362,10 +1362,16 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
                 # 检查是否AI想要执行命令
                 if current_response.startswith(self.command_start):
                     print(f"[AI] Command detected in response: {current_response}")
-                    
+
+                    # 发送命令本身到UI（通过callback）
+                    if callback:
+                        command_message = current_response.strip()
+                        print(f"[AI] >>>>> SENDING COMMAND VIA CALLBACK: {command_message}")
+                        callback(command_message)
+
                     # 添加AI回复到历史
                     history.append({"role": "assistant", "content": current_response})
-                    
+
                     # 解析命令
                     tokens = current_response.replace(self.command_start, "").strip().split(self.command_separator)
                     tokens = [t.strip() for t in tokens]
@@ -1378,8 +1384,14 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
                         
                         # 执行函数
                         res = self.exec_func(func_name, *args)
-                    
+
                     print(f"[AI] Command execution result: {res}")
+
+                    # 发送命令执行结果到UI（通过callback）
+                    if callback:
+                        result_message = f"{res}"
+                        print(f"[AI] >>>>> SENDING COMMAND RESULT VIA CALLBACK: {result_message[:100]}...")
+                        callback(result_message)
 
                     # 添加执行结果到历史（使用自定义提示词）
                     history.append({
@@ -1439,16 +1451,32 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
 
                     # 检查是否需要总结（只在第一次请求）
                     if iteration > 0 and not summary_requested:
-                        # 如果已经执行过命令，让AI总结结果（使用自定义总结提示词）
-                        print("[AI] Requesting final summary...")
-                        history.append({
-                            "role": "user",
-                            "content": self.final_summary_prompt
-                        })
+                        # 如果已经执行过命令，检查AI的响应是否已经是完整的总结
+                        # 判断标准：响应长度足够（>100字符）且包含常见的总结性词汇
+                        is_complete_answer = (
+                            len(current_response) > 100 and
+                            any(keyword in current_response for keyword in [
+                                '您的', '包含', '总结', '综上', '因此', '文件', '文件夹',
+                                'your', 'contains', 'summary', 'conclusion', 'files', 'folders'
+                            ])
+                        )
 
-                        summary_requested = True  # Mark that we've requested summary
-                        iteration += 1
-                        continue  # 最后一次迭代获取总结
+                        if is_complete_answer:
+                            # AI已经给出了完整的答案，不需要再请求总结
+                            print("[AI] AI provided complete answer, no need to request summary")
+                            print(f"[AI] Answer length: {len(current_response)}, preview: {current_response[:100]}...")
+                            break
+                        else:
+                            # AI的响应不够完整，请求总结
+                            print("[AI] Requesting final summary...")
+                            history.append({
+                                "role": "user",
+                                "content": self.final_summary_prompt
+                            })
+
+                            summary_requested = True  # Mark that we've requested summary
+                            iteration += 1
+                            continue  # 最后一次迭代获取总结
                     else:
                         # 已经请求过总结，或没有执行过命令，直接结束
                         if summary_requested:

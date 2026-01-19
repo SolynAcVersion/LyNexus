@@ -1,11 +1,10 @@
 {
   "chat_list": [
-    "2",
-    "对话_1"
+    "chat1"
   ],
   "app_settings": {
     "window_width": 1400,
     "window_height": 900,
-    "last_active_chat": "2"
+    "last_active_chat": "chat1"
   }
 }
