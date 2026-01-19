@@ -1506,8 +1506,15 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
         self.conv_his = history.copy()
         print(f"[AI] Updated conv_his with {len(self.conv_his)} messages")
 
-        # 确保生成器正确结束（无论是否使用callback）
-        yield ""  # 确保生成器结束
+        # CRITICAL: 确保生成器正确结束
+        # 发送结束标记并明确完成生成器
+        print("[AI] Stream processing completing, sending final empty chunk")
+
+        # 最后一次yield，确保生成器结束
+        yield ""
+
+        # 生成器结束后的清理（这部分在生成器被完全消费后执行）
+        print("[AI] Generator has been fully consumed and is now closed")
 
 
     def _process_user_inp_stream_internal(self, user_input: str, history: List[Dict], callback=None):

@@ -13,12 +13,15 @@ import os
 import json
 import time
 import traceback
+import shutil
+import zipfile
 from datetime import datetime
 from typing import Optional, List, Dict, Callable, Any
 from pathlib import Path
 from enum import Enum, auto
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QPushButton,
@@ -115,6 +118,64 @@ class DragDropTextEdit(QTextEdit):
         else:
             # Let parent handle non-URL drops
             super().dropEvent(event)
+
+class DraggableListWidget(QListWidget):
+    """
+    Custom QListWidget that accepts ZIP file drops for importing chat configurations.
+    When a ZIP file is dropped, it calls the parent chat box's import function.
+    """
+
+    def __init__(self, parent_chat_box=None):
+        super().__init__()
+        self.parent_chat_box = parent_chat_box
+        self.setAcceptDrops(True)
+
+    def setParentChatBox(self, chat_box):
+        """Set reference to parent chat box"""
+        self.parent_chat_box = chat_box
+
+    def dragEnterEvent(self, event):
+        """Handle drag enter event - accept URLs"""
+        if event.mimeData().hasUrls():
+            # Check if any URL is a ZIP file
+            for url in event.mimeData().urls():
+                file_path = url.toLocalFile()
+                if file_path.endswith('.zip'):
+                    event.acceptProposedAction()
+                    return
+        # Otherwise use default behavior
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        """Handle drag move event"""
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                file_path = url.toLocalFile()
+                if file_path.endswith('.zip'):
+                    event.acceptProposedAction()
+                    return
+        super().dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        """Handle drop event - process ZIP files"""
+        if event.mimeData().hasUrls():
+            zip_files = []
+
+            # Collect all ZIP files
+            for url in event.mimeData().urls():
+                file_path = url.toLocalFile()
+                if file_path.endswith('.zip') and os.path.exists(file_path):
+                    zip_files.append(file_path)
+
+            # Process ZIP files
+            if zip_files and self.parent_chat_box:
+                for zip_path in zip_files:
+                    self.parent_chat_box._import_config_from_zip_path(zip_path)
+                event.acceptProposedAction()
+                return
+
+        # Default behavior for non-ZIP files
+        super().dropEvent(event)
 
 @dataclass
 class ConversationConfig:
@@ -478,11 +539,22 @@ class MessageProcessor:
                     history,
                     callback=stream_callback
                 )
-                
-                # Handle generator if needed
-                if hasattr(response, '__iter__'):
-                    for _ in response:
-                        pass
+
+                # CRITICAL: Consume generator completely to ensure it finishes
+                # This is necessary because the generator performs cleanup after yielding ""
+                if hasattr(response, '__iter__') and not isinstance(response, (str, list, dict)):
+                    print("[MessageProcessor] Consuming generator to completion...")
+                    chunk_count = 0
+                    for chunk in response:
+                        chunk_count += 1
+                        # The callback has already been invoked with the content
+                        # We just need to consume the generator
+                        if chunk_count % 10 == 0:
+                            print(f"[MessageProcessor] Consumed {chunk_count} chunks...")
+
+                    print(f"[MessageProcessor] Generator fully consumed after {chunk_count} chunks")
+                else:
+                    print("[MessageProcessor] Response is not a generator or is already consumed")
 
                 # Check if there were any errors in the response
                 full_response_lower = result['full_response'].lower()
@@ -735,12 +807,8 @@ class StreamingProcessor:
 
             self.current_chunks.append(chunk)
             if self.parent:
-                QMetaObject.invokeMethod(
-                    self.parent,
-                    "handle_stream_chunk",
-                    Qt.QueuedConnection,
-                    Q_ARG(str, chunk)
-                )
+                # Use signal instead of QMetaObject.invokeMethod for reliability
+                self.parent.stream_chunk_signal.emit(chunk)
 
         context.stream_callback = stream_callback
 
@@ -1182,7 +1250,11 @@ class ModernMessageBubble(QWidget):
 
 class ModernChatBox(QWidget):
     """Refactored main chat interface"""
-    
+
+    # Signals for thread-safe UI updates
+    finalize_response = Signal(str)
+    stream_chunk_signal = Signal(str)
+
     def __init__(self):
         super().__init__()
         
@@ -1218,7 +1290,11 @@ class ModernChatBox(QWidget):
         # Initialize
         self._initialize_ui()
         self._initialize_ai()
-        
+
+        # Connect signals
+        self.finalize_response.connect(self._finalize_streaming_response)
+        self.stream_chunk_signal.connect(self.handle_stream_chunk)
+
         print("[ModernChatBox] Initialization complete")
     
     # ============================================================================
@@ -1393,9 +1469,9 @@ class ModernChatBox(QWidget):
             }
         """)
         layout.addWidget(chats_label)
-        
-        # Chat list
-        self.chat_list = QListWidget()
+
+        # Chat list - use custom DraggableListWidget for ZIP file drag-drop support
+        self.chat_list = DraggableListWidget(parent_chat_box=self)
         self.chat_list.setStyleSheet("""
             QListWidget {
                 background-color: transparent;
@@ -1437,11 +1513,12 @@ class ModernChatBox(QWidget):
         
         # Action buttons
         actions = [
-            (i18n.tr("import_config"), self._import_config_file, "#3A3A3A"),
+            (i18n.tr("import_config_file"), self._import_config_file, "#3A3A3A"),
             (i18n.tr("settings"), self._open_settings, "#4A4A4A"),
             (i18n.tr("initialize"), self._show_init_dialog, "#2A7CDD"),
             (i18n.tr("tools"), self._show_tools_list, "#3A3A3A"),
             (i18n.tr("export_chat"), self._export_chat_history, "#3A3A3A"),
+            (i18n.tr("import_config"), self._import_config_from_zip, "#2E7D32"),
             (i18n.tr("delete_chat"), self._delete_current_chat, "#D32F2F"),
             (i18n.tr("clear_chat"), self._clear_current_chat, "#666666")
         ]
@@ -1776,15 +1853,10 @@ class ModernChatBox(QWidget):
                         ai_instance.conv_his
                     )
 
-            # Use QMetaObject.invokeMethod to ensure execution on main thread
-            # This is more reliable than QTimer.singleShot in thread pool callbacks
-            print("[ChatBox] Scheduling finalize with QMetaObject.invokeMethod")
-            QMetaObject.invokeMethod(
-                self,
-                "_finalize_streaming_response",
-                Qt.ConnectionType.QueuedConnection,
-                Q_ARG(str, response_text)
-            )
+            # Use Signal to ensure UI operations happen on main thread
+            # This is the most reliable way for cross-thread communication in Qt
+            print("[ChatBox] Emitting finalize_response signal")
+            self.finalize_response.emit(response_text)
 
         except Exception as e:
             print(f"[ChatBox] Error in _handle_streaming_result: {e}")
@@ -2963,10 +3035,151 @@ class ModernChatBox(QWidget):
                                 f.write(f"{msg.get('text', '')}\n\n")
                     
                     QMessageBox.information(self, "Export Success", f"Chat exported to:\n{file_path}")
-                    
+
                 except Exception as e:
                     QMessageBox.warning(self, "Export Error", f"Failed to export: {e}")
-    
+
+    def _import_config_from_zip(self):
+        """
+        Import chat configuration from a zip archive (via file dialog).
+        The archive should contain a {chat_name}/ folder with:
+        - settings.json
+        - tools/ directory
+        Extracts to data/ and adds to chat list, then switches to it.
+        """
+        try:
+            # Open file dialog to select zip file
+            file_dialog = QFileDialog(self)
+            file_dialog.setWindowTitle(i18n.tr("import_config"))
+            file_dialog.setFileMode(QFileDialog.ExistingFile)
+            file_dialog.setNameFilter("ZIP Archives (*.zip)")
+
+            selected_files, _ = file_dialog.getOpenFileNames(
+                self, "Select Configuration Archive", "", "ZIP Archives (*.zip)"
+            )
+
+            if not selected_files:
+                return
+
+            zip_path = selected_files[0]
+            self._import_config_from_zip_path(zip_path)
+
+        except Exception as e:
+            QMessageBox.warning(self, "Import Error", f"Failed to import configuration:\n{e}")
+
+    def _import_config_from_zip_path(self, zip_path: str):
+        """
+        Import chat configuration from a specific zip file path.
+        This method can be called from drag-drop or file dialog.
+
+        Args:
+            zip_path: Path to the ZIP archive file
+        """
+        try:
+            # Read zip archive
+            with zipfile.ZipFile(zip_path, 'r') as zipf:
+                # Get list of files in zip
+                file_list = zipf.namelist()
+
+                # Validate ZIP structure
+                # Must contain: {chat_name}/settings.json and {chat_name}/tools/
+                chat_folder_name = None
+                has_settings = False
+                has_tools = False
+
+                for name in file_list:
+                    parts = name.split('/')
+                    if len(parts) > 1:
+                        if not chat_folder_name:
+                            chat_folder_name = parts[0]
+
+                        # Check for settings.json
+                        if len(parts) == 2 and parts[1] == 'settings.json':
+                            has_settings = True
+
+                        # Check for tools directory
+                        if len(parts) >= 2 and parts[1] == 'tools':
+                            has_tools = True
+
+                # Validate structure
+                if not chat_folder_name or not has_settings or not has_tools:
+                    QMessageBox.warning(
+                        self,
+                        i18n.tr("invalid_zip_format"),
+                        i18n.tr("invalid_zip_message")
+                    )
+                    return
+
+                # Generate unique chat name
+                original_name = chat_folder_name
+                new_chat_name = original_name
+                counter = 1
+
+                # Check if name already exists and generate unique name
+                existing_chats = set(self.chat_list_names)
+                while new_chat_name in existing_chats:
+                    new_chat_name = f"{original_name}_{counter}"
+                    counter += 1
+
+                # Extract to data directory
+                temp_extract_dir = Path("data") / "__temp_import__"
+                temp_extract_dir.mkdir(exist_ok=True, parents=True)
+
+                try:
+                    # Extract all files
+                    zipf.extractall(temp_extract_dir)
+
+                    # Source and destination paths
+                    source_chat_dir = temp_extract_dir / chat_folder_name
+                    dest_chat_dir = Path("data") / new_chat_name
+
+                    # Move extracted folder to final location
+                    if dest_chat_dir.exists():
+                        shutil.rmtree(dest_chat_dir)
+                    shutil.move(str(source_chat_dir), str(dest_chat_dir))
+
+                    # Update settings.json if name was changed
+                    if new_chat_name != original_name:
+                        settings_path = dest_chat_dir / "settings.json"
+                        if settings_path.exists():
+                            with open(settings_path, 'r', encoding='utf-8') as f:
+                                settings = json.load(f)
+                            # Update any chat-specific settings if needed
+                            with open(settings_path, 'w', encoding='utf-8') as f:
+                                json.dump(settings, f, indent=2, ensure_ascii=False)
+
+                    # Add to app_config.json chat list
+                    if new_chat_name not in self.chat_list_names:
+                        self.chat_list_names.append(new_chat_name)
+                        self.config_manager.save_chat_list(self.chat_list_names)
+
+                    # Add to UI
+                    self._load_chat_list_to_ui()
+
+                    # Switch to the newly imported chat
+                    # Find the item in the list
+                    for i in range(self.chat_list.count()):
+                        item = self.chat_list.item(i)
+                        if item.data(Qt.UserRole) == new_chat_name:
+                            self.switch_chat_target(item)
+                            break
+
+                    QMessageBox.information(self, "Import Success",
+                        f"Configuration imported successfully!\n\n"
+                        f"Chat name: {new_chat_name}\n"
+                        f"Location: data/{new_chat_name}/")
+
+                finally:
+                    # Clean up temp directory
+                    if temp_extract_dir.exists():
+                        shutil.rmtree(temp_extract_dir)
+
+        except zipfile.BadZipFile:
+            QMessageBox.warning(self, i18n.tr("invalid_zip_format"),
+                i18n.tr("invalid_zip_message"))
+        except Exception as e:
+            QMessageBox.warning(self, "Import Error", f"Failed to import configuration:\n{e}")
+
     def _show_init_dialog(self):
         """Show initialization dialog"""
         if self.init_dialog is None:

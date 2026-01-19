@@ -508,17 +508,67 @@ AI(
 
 ### Importing & Exporting Presets
 
+#### Export Configuration as ZIP (Recommended)
+
 **Export Your Configuration:**
+1. Settings → Export Config
+2. Choose location (Desktop recommended)
+3. Filename format: `{chat_name}-{timestamp}.zip`
+4. **What's included:**
+   - `settings.json` - All your settings (API keys excluded for safety)
+   - `tools/` - All MCP tools and configurations
+5. **What's excluded:**
+   - Chat history (`{chat_name}_ai.json`)
+   - API keys (stored in `.confignore`)
+
+**Use cases:**
+- 📦 Backup your chat configuration
+- 📤 Share your setup with friends
+- 🔄 Transfer settings to another computer
+- 💾 Save multiple configurations for different use cases
+
+#### Import Configuration from ZIP
+
+**Method 1: Drag & Drop (Easiest)**
+1. Locate your ZIP file (e.g., `chat1-20250119123456.zip`)
+2. Drag it directly onto the chat list in the left sidebar
+3. Configuration is automatically imported as a new chat
+4. If a chat with the same name exists, it will be renamed (e.g., `chat1_1`)
+
+**Method 2: Import Button**
+1. Click "Import Config" in the sidebar
+2. Select the ZIP file
+3. Configuration is imported automatically
+
+**After Import:**
+- The new chat appears in the left sidebar
+- You're automatically switched to it
+- All settings and tools are ready to use
+- Just add your API key and start chatting!
+
+**ZIP Structure:**
+```
+chat1.zip
+└── chat1/
+    ├── settings.json    # Your configuration
+    └── tools/           # MCP tools
+        ├── files.py
+        ├── ocr.py
+        └── ...
+```
+
+#### Export/Import JSON Presets (Legacy)
+
+**Export as JSON:**
 1. Settings → Save As Config
 2. Choose location (Desktop recommended)
 3. Save as `.json` file
 4. **⚠️ Important**: Never share your `.confignore` file (contains API keys!)
 
-**Import a Configuration:**
-1. Click "Import Config" in sidebar
+**Import JSON:**
+1. Click "Import Settings" in sidebar (for current chat)
 2. Select `.json` preset file
-3. Settings are applied automatically
-4. Add your own API key in Settings
+3. Settings are applied to current chat
 
 **Import During Setup:**
 1. In initialization dialog, click "Load Config File"

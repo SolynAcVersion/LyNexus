@@ -7,8 +7,11 @@ Allows modifying settings of an existing AI instance without creating a new one
 import os
 import json
 import yaml
+import zipfile
+from datetime import datetime
+from pathlib import Path
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QGridLayout, QFileDialog, QMessageBox, QComboBox,
     QGroupBox, QTextEdit, QCheckBox, QSpinBox, QDoubleSpinBox,
     QScrollArea
@@ -236,12 +239,12 @@ class SettingsDialog(QWidget):
         button_layout.setSpacing(10)
         
         # Save Settings button - updates existing AI instance
-        save_btn = QPushButton("Save Settings")
+        save_btn = QPushButton(i18n.tr("save_settings"))
         save_btn.clicked.connect(self.save_settings)
         save_btn.setStyleSheet("""
             QPushButton {
-                background-color: #4a9cff; 
-                color: white; 
+                background-color: #4a9cff;
+                color: white;
                 font-weight: bold;
                 padding: 8px 16px;
                 border-radius: 4px;
@@ -250,9 +253,9 @@ class SettingsDialog(QWidget):
                 background-color: #5aacff;
             }
         """)
-        
+
         # Save As Config button - exports settings to file
-        save_as_btn = QPushButton("Save As Config")
+        save_as_btn = QPushButton(i18n.tr("save_as_config"))
         save_as_btn.clicked.connect(self.save_config_file)
         save_as_btn.setStyleSheet("""
             QPushButton {
@@ -267,9 +270,9 @@ class SettingsDialog(QWidget):
                 border-color: #4a9cff;
             }
         """)
-        
+
         # Cancel button
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton(i18n.tr("cancel"))
         cancel_btn.clicked.connect(self.close)
         cancel_btn.setStyleSheet("""
             QPushButton {
@@ -561,46 +564,74 @@ class SettingsDialog(QWidget):
             QMessageBox.warning(self, "Save Error", f"Failed to save settings: {e}")
     
     def save_config_file(self):
-        """Save current settings to a configuration file (without sensitive data)."""
-        file_dialog = QFileDialog(self)
-        file_dialog.setWindowTitle("Save Configuration File")
-        file_dialog.setAcceptMode(QFileDialog.AcceptSave)
-        file_dialog.setNameFilter("JSON Files (*.json);;YAML Files (*.yaml *.yml)")
-        
-        if file_dialog.exec():
-            selected_files = file_dialog.selectedFiles()
-            if selected_files:
-                config_path = selected_files[0]
-                
-                try:
-                    # Create safe configuration (without API key)
-                    safe_config = {
-                        'api_base': self.api_base_edit.text().strip(),
-                        'model': self.model_edit.text().strip(),
-                        'temperature': self.temp_spin.value(),
-                        'max_tokens': self.max_tokens_spin.value() if self.max_tokens_spin.value() > 0 else None,
-                        'top_p': self.top_p_spin.value(),
-                        'presence_penalty': self.presence_spin.value(),
-                        'frequency_penalty': self.frequency_spin.value(),
-                        'command_start': self.cmd_start_edit.text().strip(),
-                        'command_separator': self.cmd_separator_edit.text().strip(),
-                        'max_iterations': self.max_iter_spin.value(),
-                        'system_prompt': self.prompt_edit.toPlainText().strip(),
-                        'mcp_paths': self.mcp_paths,
-                        'name': f'Lynexus Configuration - {self.conversation_name}',
-                        'version': '1.0.0',
-                        'created': os.path.basename(config_path)
-                    }
-                    
-                    # Save based on file type
-                    if config_path.endswith('.json'):
-                        with open(config_path, 'w', encoding='utf-8') as f:
-                            json.dump(safe_config, f, indent=2, ensure_ascii=False)
-                    elif config_path.endswith('.yaml') or config_path.endswith('.yml'):
-                        with open(config_path, 'w', encoding='utf-8') as f:
-                            yaml.dump(safe_config, f, default_flow_style=False, allow_unicode=True)
-                    
-                    QMessageBox.information(self, "Success", f"Configuration saved to:\n{config_path}")
-                    
-                except Exception as e:
-                    QMessageBox.warning(self, "Save Error", f"Failed to save configuration file:\n{e}")
+        """
+        Export current chat configuration to a zip archive.
+        The archive contains:
+        - settings.json
+        - tools/ directory with all subfiles
+        Excludes:
+        - .confignore
+        - {chat_name}_ai.json (chat history)
+        """
+        try:
+            # Get chat directory
+            chat_dir = self.chat_data_manager.get_chat_dir(self.conversation_name)
+
+            if not chat_dir.exists():
+                QMessageBox.warning(self, "Export Error",
+                    f"Chat directory does not exist: {chat_dir}")
+                return
+
+            # Generate zip filename: {chat_name}-{timestamp}.zip
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            safe_chat_name = self.chat_data_manager._sanitize_chat_name(self.conversation_name)
+            zip_filename = f"{safe_chat_name}-{timestamp}.zip"
+
+            # Open file dialog to select save location
+            file_dialog = QFileDialog(self)
+            file_dialog.setWindowTitle(i18n.tr("save_as_config"))
+            file_dialog.setAcceptMode(QFileDialog.AcceptSave)
+            file_dialog.setNameFilter("ZIP Archives (*.zip)")
+            file_dialog.selectFile(zip_filename)
+
+            if file_dialog.exec():
+                selected_files = file_dialog.selectedFiles()
+                if selected_files:
+                    output_path = selected_files[0]
+
+                    # Create zip archive
+                    try:
+                        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                            # Add settings.json if it exists
+                            settings_path = chat_dir / "settings.json"
+                            if settings_path.exists():
+                                # Add to zip as {chat_name}/settings.json
+                                arcname = f"{safe_chat_name}/settings.json"
+                                zipf.write(settings_path, arcname)
+
+                            # Add tools directory and all its contents
+                            tools_dir = chat_dir / "tools"
+                            if tools_dir.exists():
+                                for root, dirs, files in os.walk(tools_dir):
+                                    for file in files:
+                                        file_path = Path(root) / file
+
+                                        # Skip __pycache__ directories
+                                        if "__pycache__" in str(file_path):
+                                            continue
+
+                                        # Calculate archive name
+                                        rel_path = file_path.relative_to(chat_dir)
+                                        arcname = f"{safe_chat_name}/{rel_path}"
+                                        zipf.write(file_path, arcname)
+
+                        QMessageBox.information(self, "Success",
+                            f"Configuration exported successfully to:\n{output_path}")
+
+                    except Exception as e:
+                        QMessageBox.warning(self, "Export Error",
+                            f"Failed to create zip archive:\n{e}")
+                        raise
+
+        except Exception as e:
+            QMessageBox.warning(self, "Export Error", f"Failed to export configuration:\n{e}")

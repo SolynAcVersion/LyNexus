@@ -1,6 +1,8 @@
 {
   "chat_list": [
-    "chat1"
+    "chat1",
+    "chat1_1",
+    "对话_1"
   ],
   "app_settings": {
     "window_width": 1400,

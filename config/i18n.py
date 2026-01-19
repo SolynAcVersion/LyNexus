@@ -27,6 +27,11 @@ class I18n:
                 # Buttons
                 "send": "Send",
                 "settings": "Settings",
+                "save_settings": "Save Settings",
+                "save_as_config": "Export Config",
+                "import_config": "Import Config",
+                "import_config_file": "Import Settings",
+                "cancel": "Cancel",
                 "initialize": "Initialize",
                 "load_config": "Load Config",
                 "tools": "Tools",
@@ -48,6 +53,8 @@ class I18n:
                 "confirm_delete_message": 'Are you sure you want to delete chat "{0}"?',
                 "warning": "Warning",
                 "cannot_switch_during_process": "Please wait for the current response to complete before switching conversations.",
+                "invalid_zip_format": "Invalid Archive Format",
+                "invalid_zip_message": "The ZIP file must contain a single folder with settings.json and tools/ directory inside.",
                 
                 # Messages
                 "type_message": "Type your message here...",
@@ -75,6 +82,11 @@ class I18n:
                 # Buttons
                 "send": "发送",
                 "settings": "设置",
+                "save_settings": "保存设置",
+                "save_as_config": "导出配置",
+                "import_config": "导入配置",
+                "import_config_file": "导入设置",
+                "cancel": "取消",
                 "initialize": "初始化",
                 "load_config": "加载配置",
                 "tools": "工具",
@@ -96,6 +108,8 @@ class I18n:
                 "confirm_delete_message": '确定要删除聊天 "{0}" 吗？',
                 "warning": "警告",
                 "cannot_switch_during_process": "请等待当前响应完成后再切换对话。",
+                "invalid_zip_format": "无效的压缩包格式",
+                "invalid_zip_message": "ZIP 文件必须包含一个文件夹，其中包含 settings.json 和 tools/ 目录。",
                 
                 # Messages
                 "type_message": "在此输入消息...",
