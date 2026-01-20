@@ -1236,28 +1236,13 @@ class ModernMessageBubble(QWidget):
 
         Args:
             additional_text: Text to append
-            render_html: Whether to render as HTML (for line-complete streaming)
+            render_html: Whether to render as HTML (ignored, markdown only rendered on finalize)
         """
         self.current_text += additional_text
 
-        # Determine if we should render markdown
-        # INFO type now supports markdown rendering (for system messages like initialization)
-        should_render = (
-            self.enable_markdown and
-            render_html and
-            self.bubble_type != BubbleType.USER_MESSAGE and
-            self.bubble_type not in [BubbleType.COMMAND_REQUEST, BubbleType.ERROR]
-        )
-
-        # For streaming: render incrementally if requested
-        if should_render:
-            display_text, _ = self.renderer.render_incremental(
-                self.current_text[:-len(additional_text)],
-                additional_text
-            )
-        else:
-            # Plain text for streaming chunks - preserve newlines!
-            display_text = self.renderer._escape_text(self.current_text)
+        # Always use plain text during streaming to avoid flickering
+        # Markdown will only be rendered when finalize_rendering() is called
+        display_text = self.renderer._escape_text(self.current_text)
 
         self.message_label.setText(display_text)
         self.timestamp_label.setText(datetime.now().strftime("%H:%M"))
@@ -2007,13 +1992,21 @@ class ModernChatBox(QWidget):
 
             if self.current_stream_bubble:
                 self.current_stream_bubble.is_streaming = False
-                if display_text:
-                    # Update with final summary only and finalize markdown rendering
-                    self.current_stream_bubble.update_text(display_text)
-                    self.current_stream_bubble.finalize_rendering()
-                    # Save the final bubble content with correct bubble type
+                # 注意：streaming过程中所有内容已经通过handle_stream_chunk添加到气泡了
+                # 这里只需要finalize渲染,不需要再更新文本(除非气泡为空)
+                if not self.current_stream_bubble.current_text.strip():
+                    # 气泡为空时才使用display_text更新
+                    if display_text:
+                        self.current_stream_bubble.update_text(display_text)
+
+                # 总是finalize markdown渲染
+                self.current_stream_bubble.finalize_rendering()
+
+                # 保存聊天记录
+                bubble_text = self.current_stream_bubble.current_text
+                if bubble_text and bubble_text.strip():
                     bubble_type = self.current_stream_bubble.bubble_type
-                    self._save_chat_record(display_text, False, bubble_type)
+                    self._save_chat_record(bubble_text, False, bubble_type)
                 else:
                     # No display text but have bubble, save its current content
                     if hasattr(self.current_stream_bubble, 'message_label'):
@@ -2158,8 +2151,10 @@ class ModernChatBox(QWidget):
 
         # Update command bubble with result
         if command_result['success']:
+            result_text = command_result['command_result']
+            display_result = result_text[:100] + "..." if len(result_text) > 100 else result_text
             command_bubble.update_text(
-                f"✅ Command executed successfully\n{command_result['command_result'][:200]}..."
+                f"✅ Command executed successfully\n{display_result}"
             )
 
             # Request and show summary
@@ -2396,9 +2391,11 @@ class ModernChatBox(QWidget):
                     if is_command_result:
                         print(f"[ChatBox] ✓✓✓ COMMAND RESULT DETECTED ✓✓✓")
                         print(f"[ChatBox] Result preview: {chunk_clean[:150]}...")
+                        # 限制命令结果显示为前100字
+                        display_result = chunk_clean[:100] + "..." if len(chunk_clean) > 100 else chunk_clean
                         # 创建命令结果气泡
                         result_bubble = self._add_message_to_display(
-                            message=chunk_clean,
+                            message=display_result,
                             bubble_type=BubbleType.COMMAND_RESULT
                         )
                         self.command_bubbles.append(result_bubble)  # Track for cleanup
@@ -2453,7 +2450,8 @@ class ModernChatBox(QWidget):
                             self.current_stream_bubble.is_streaming = True
                         else:
                             # Pass the original chunk with newlines preserved
-                            self.current_stream_bubble.append_text(chunk, render_html=True)
+                            # render_html=False to prevent flickering, markdown will be rendered on finalize
+                            self.current_stream_bubble.append_text(chunk, render_html=False)
 
                         QApplication.processEvents()
                         self._scroll_to_bottom()
@@ -2475,10 +2473,9 @@ class ModernChatBox(QWidget):
             )
             self.current_stream_bubble.is_streaming = True
         else:
-            # Incremental rendering: Always try to render for streaming
-            # Check if chunk ends with newline (line complete)
-            ends_with_newline = chunk.endswith('\n')
-            self.current_stream_bubble.append_text(chunk, render_html=ends_with_newline)
+            # Always use plain text during streaming to prevent flickering
+            # Markdown will be rendered when finalize_rendering() is called
+            self.current_stream_bubble.append_text(chunk, render_html=False)
 
         QApplication.processEvents()
         self._scroll_to_bottom()

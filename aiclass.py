@@ -746,17 +746,17 @@ FAILURE TO FOLLOW TOOL DESCRIPTION WORKFLOWS WILL RESULT IN ERRORS."""
         return """【CRITICAL: Markdown Formatting Requirements - MANDATORY】
 
 **MANDATORY LINE BREAK RULES:**
-You MUST use actual newline characters (\\n) between different points, items, or sections.
+You MUST use actual newline characters (<br>) between different points, items, or sections.
 - NEVER cram multiple items into one paragraph
-- ALWAYS use \\n before each bullet point
-- ALWAYS use \\n before each numbered list item
-- ALWAYS use \\n between different sections
+- ALWAYS use <br> before each bullet point
+- ALWAYS use <br> before each numbered list item
+- ALWAYS use <br> between different sections
 
 **Correct Format:**
 ```
-Here are the items:\\n
-- Item 1\\n
-- Item 2\\n
+Here are the items:<br>
+- Item 1<br>
+- Item 2<br>
 - Item 3
 ```
 
@@ -768,8 +768,8 @@ Here are the items: - Item 1 - Item 2 - Item 3
 **MANDATORY STRUCTURE:**
 1. Start with a brief summary (2-3 sentences max)
 2. Use ## for main sections
-3. Use - or * for bullet points (with \\n before each)
-4. Use numbered lists (1. 2. 3.) for steps (with \\n before each)
+3. Use - or * for bullet points (with <br> before each)
+4. Use numbered lists (1. 2. 3.) for steps (with <br> before each)
 5. Use ```language for code blocks
 6. End with a brief conclusion
 
@@ -777,10 +777,10 @@ Here are the items: - Item 1 - Item 2 - Item 3
 Respond in the SAME language as the user's message (Chinese→Chinese, English→English).
 
 **Line Break Examples:**
-GOOD: "Found 5 files:\\n\\n1. file1.txt\\n2. file2.txt\\n3. file3.txt"
+GOOD: "Found 5 files:<br><br>1. file1.txt<br>2. file2.txt<br>3. file3.txt"
 BAD: "Found 5 files: 1. file1.txt 2. file2.txt 3. file3.txt"
 
-GOOD: "Categories:\\n\\n- Programming\\n- Tools\\n- Documents"
+GOOD: "Categories:<br><br>- Programming<br>- Tools<br>- Documents"
 BAD: "Categories: - Programming - Tools - Documents"
 
 **Code Format:**
@@ -1488,11 +1488,8 @@ STRICTLY ENFORCE PROPER LINE BREAKS AND STRUCTURE IN EVERY RESPONSE."""
                 if current_response.startswith(self.command_start):
                     print(f"[AI] Command detected in response: {current_response}")
 
-                    # 发送命令本身到UI（通过callback）
-                    if callback:
-                        command_message = current_response.strip()
-                        print(f"[AI] >>>>> SENDING COMMAND VIA CALLBACK: {command_message}")
-                        callback(command_message)
+                    # 注意：命令已经在streaming过程中通过第1481-1487行的callback发送过了
+                    # 这里不需要再发送一次，避免重复显示
 
                     # 添加AI回复到历史
                     history.append({"role": "assistant", "content": current_response})
@@ -1513,8 +1510,13 @@ STRICTLY ENFORCE PROPER LINE BREAKS AND STRUCTURE IN EVERY RESPONSE."""
                     print(f"[AI] Command execution result: {res}")
 
                     # 发送命令执行结果到UI（通过callback）
-                    if callback:
-                        result_message = f"{res}"
+                    # 注意：只在成功时发送,并且要提取实际结果(去掉"Execution successful:"前缀)
+                    if callback and "Execution successful:" in res:
+                        # 提取实际结果内容
+                        actual_result = res.replace("Execution successful: ", "").strip()
+                        # 限制显示长度为100字
+                        display_result = actual_result[:100] + "..." if len(actual_result) > 100 else actual_result
+                        result_message = f"Execution successful:\n{display_result}"
                         print(f"[AI] >>>>> SENDING COMMAND RESULT VIA CALLBACK: {result_message[:100]}...")
                         callback(result_message)
 

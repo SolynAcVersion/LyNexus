@@ -11,6 +11,9 @@ chathistory/
 /.claude/
 /conversations/
 
+build/
+
+
 # Data directory - all chat data is stored here
 # Structure: data/{chat_name}/
 #   - settings.json: Chat settings (without API keys)

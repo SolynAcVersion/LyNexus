@@ -273,7 +273,7 @@ def write_to_file(text: str, filepath: Union[str, None], mode: str) -> str:
     - text: Text to write (string, required)
       Note: Escape characters (like \\n, \\t) will be interpreted according to Python rules.
       If you want to write a literal backslash and n, use \\\\n.
-      Example: "Hello, World!\\nThis is a new line." or "Hello\\tWorld"
+      Example: "Hello, World!<br>This is a new line." or "Hello\\tWorld"
 
     - filepath: File path (string or None, required)
       If None, the text will be returned without writing to a file.

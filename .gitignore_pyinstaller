@@ -1,0 +1,15 @@
+# PyInstaller 构建输出
+build/
+dist/
+*.spec
+
+# PyInstaller 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 如果使用 UPX
+*.upx
+
+# 临时文件
+*.log
