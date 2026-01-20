@@ -81,8 +81,9 @@ That's it! You're ready to chat!
 **How to Chat**
 1. Click in the input box at the bottom
 2. Type your message
-3. Press Ctrl+Enter or click the send button
-4. The AI will respond!
+3. **💡 Pro tip**: You can drag and drop files into the input box to get their file path
+4. Press Ctrl+Enter or click the send button
+5. The AI will respond!
 
 **Example conversations:**
 - "Help me write an email to my boss"
@@ -124,33 +125,37 @@ Lynexus can execute commands on your computer! Here's how:
 We've prepared a special package for beginners that includes ready-to-use tools!
 
 **What's in the package:**
-- 📁 **File Operations**: Read, write, copy, move, delete files
-- 🔍 **Web Search**: Search Baidu and read web pages
-- 👁️ **OCR**: Extract text from images and PDFs
-- 🌐 **Network Tools**: Download documents, test connections
+- 📁 **File Operations** (`files.py`): Read, write, copy, move, delete files
+- 👁️ **OCR** (`ocr.py`): Extract text from images and PDFs
 
 **How to use it (Super Easy!):**
 
 1. **Download the tools package** from [GitHub Releases](https://github.com/SolynAcVersion/LyNexus/releases)
-   - Look for `lynexus_tools.zip`
+   - Look for `prefab_file_operator.zip`
 
 2. **Extract the package** - You'll see:
-   - A `tools/` folder
+   - A `tools/` folder (containing `files.py` and `ocr.py`)
    - A `prefab_file_operator.json` configuration file
 
 3. **Place the `tools/` folder** in your Lynexus directory:
    - **If using `.exe`**: Put it in the same folder as `Lynexus.exe`
    - **If using source code**: Put it in the project root directory
 
-4. **Load the configuration**:
-   - Method 1: When starting Lynexus, click "Load Config File" and select `prefab_file_operator.json`
-   - Method 2: In the main window, click "Import Config" and select `prefab_file_operator.json`
+4. **⚠️ For OCR functionality only**: Install and start Umi-OCR
+   - Download from: [Umi-OCR GitHub](https://github.com/hiroi-sora/Umi-OCR)
+   - Run `\Umi-OCR\Umi-OCR.exe`
+   - Make sure it's running on `127.0.0.1:1224` (default settings)
+   - **Note**: OCR won't work without Umi-OCR running, but file operations will work fine
 
-5. **That's it!** Now you can:
+5. **Load the configuration** (choose any method):
+   - **Method 1 - Drag & Drop (Easiest)**: Drag the `prefab_file_operator.json` file directly onto the chat list in the left sidebar
+   - **Method 2 - Import Button**: In the main window, click "Import Config" and select `prefab_file_operator.json`
+   - **Method 3 - Setup Wizard**: When starting Lynexus, click "Load Config File" and select `prefab_file_operator.json`
+
+6. **That's it!** Now you can:
    - Read files: "Read config.txt"
    - Create files: "Create a notes.txt file with my meeting notes"
-   - Search the web: "Search for Python tutorials"
-   - Extract text from images: "Extract text from screenshot.png"
+   - Extract text from images: "Extract text from screenshot.png" (requires Umi-OCR running)
 
 **Example conversations after setup:**
 ```
@@ -202,21 +207,7 @@ The AI will:
 
 **Note**: This requires the [Beginner Tools Package](#step-5-ai-commands-the-magic-part) to be installed.
 
-### Task 3: Research and Summarize (Requires Tools Package)
-
-**Prompt:**
-```
-Search for information about climate change and summarize the key points
-```
-
-The AI will:
-1. Use the `search_baidu` tool
-2. Read the results
-3. Give you a clear summary
-
-**Note**: This requires the [Beginner Tools Package](#step-5-ai-commands-the-magic-part) to be installed.
-
-### Task 4: Extract Text from Images (Requires Tools Package)
+### Task 3: Extract Text from Images (Requires Tools Package + Umi-OCR)
 
 **Prompt:**
 ```
@@ -228,7 +219,7 @@ The AI will:
 2. Extract all text from the image
 3. Display the results
 
-**Note**: This requires the [Beginner Tools Package](#step-5-ai-commands-the-magic-part) to be installed.
+**Note**: This requires both the [Beginner Tools Package](#step-5-ai-commands-the-magic-part) and [Umi-OCR](https://github.com/hiroi-sora/Umi-OCR) to be installed and running.
 
 ---
 
@@ -302,6 +293,33 @@ Once you're comfortable with basic chatting:
 # ⚡ ADVANCED TRACK
 
 ## Advanced Configuration & Customization
+
+### Quick Parameter Reference (Most Common Settings)
+
+Before diving into presets, here are the most important parameters you'll use:
+
+**Temperature** (0.0 - 2.0)
+- `0.0 - 0.3`: Precise, consistent (good for coding)
+- `0.4 - 0.7`: Balanced, natural (general use)
+- `0.8 - 1.2`: Creative, varied (brainstorming)
+- `1.3 - 2.0`: Very random, experimental
+
+**Max Tokens** (Response length)
+- `512 - 1024`: Short answers
+- `2048`: Standard length (default)
+- `4096+`: Long, detailed explanations
+
+**Top P** (0.0 - 1.0)
+- Controls diversity: Lower = more focused, Higher = more diverse
+
+**Presence & Frequency Penalty** (-2.0 to 2.0)
+- Positive values: Avoid repetition
+- Negative values: Encourage repetition
+- `0.0`: Neutral (default)
+
+> 💡 **Need more details?** See the [Complete Parameter Reference](#complete-parameter-reference) at the end of this document.
+
+---
 
 ### Understanding Presets
 

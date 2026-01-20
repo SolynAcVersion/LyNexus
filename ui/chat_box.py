@@ -1373,8 +1373,9 @@ class ModernChatBox(QWidget):
         self._initialize_ai()
 
         # Connect signals
-        self.finalize_response.connect(self._finalize_streaming_response)
-        self.stream_chunk_signal.connect(self.handle_stream_chunk)
+        # Use QueuedConnection to ensure slots execute in the main thread
+        self.finalize_response.connect(self._finalize_streaming_response, Qt.QueuedConnection)
+        self.stream_chunk_signal.connect(self.handle_stream_chunk, Qt.QueuedConnection)
 
         print("[ModernChatBox] Initialization complete")
     
@@ -2285,6 +2286,9 @@ class ModernChatBox(QWidget):
 
         IMPORTANT: Filter out ALL command-related content before display.
         Only show clean final results to the user.
+
+        CRITICAL: This method is called from a Qt signal connected to a worker thread.
+        All UI operations must be thread-safe.
         """
         if not chunk:
             return
@@ -2675,13 +2679,18 @@ class ModernChatBox(QWidget):
     # UI HELPERS
     # ============================================================================
     
-    def _add_message_to_display(self, message: str, bubble_type: BubbleType, 
+    def _add_message_to_display(self, message: str, bubble_type: BubbleType,
                                timestamp: str = None) -> ModernMessageBubble:
-        """Add message to display area"""
+        """Add message to display area
+
+        CRITICAL: Must be called from main thread only.
+        """
         if not timestamp:
             timestamp = datetime.now().strftime("%H:%M")
-        
-        bubble = ModernMessageBubble(message, bubble_type, timestamp)
+
+        # Create bubble with explicit parent (message_container) to avoid threading issues
+        # This prevents "QObject::setParent: Cannot set parent, new parent is in a different thread" errors
+        bubble = ModernMessageBubble(message, bubble_type, timestamp, parent=self.message_container)
         self.message_layout.insertWidget(self.message_layout.count() - 1, bubble)
         
         self.message_container.adjustSize()
@@ -2900,8 +2909,8 @@ class ModernChatBox(QWidget):
                     # No saved bubble type, detect from text (for old records)
                     bubble_type = self._detect_bubble_type(text, is_sender)
 
-                # Create bubble
-                bubble = ModernMessageBubble(text, bubble_type, time_str)
+                # Create bubble with explicit parent
+                bubble = ModernMessageBubble(text, bubble_type, time_str, parent=self.message_container)
                 self.message_layout.insertWidget(self.message_layout.count() - 1, bubble)
 
                 # Apply markdown rendering for AI responses and summaries

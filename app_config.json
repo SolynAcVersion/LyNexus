@@ -1,6 +1,7 @@
 {
   "chat_list": [
-    "prefab_file_operator"
+    "prefab_file_operator",
+    "chatsimply_chat"
   ],
   "app_settings": {
     "window_width": 1400,
