@@ -32,7 +32,7 @@ Lynexus是一个**社区驱动的AI智能体平台**，使开发者能够创建�
 ### 🔄 **社区驱动的生态系统**
 - **一键导出**：打包整个配置用于分享
 - **一键导入**：立即使用他人优化的配置
-- **论坛集成**：在社区论坛分享和发现配置
+- **论坛集成**：在社区论坛分享和发现配置（🚧 正在建设）
 - **站在巨人肩膀上**：基于经过社区测试的配置构建
 
 ### 🎨 **现代化界面**
@@ -62,8 +62,8 @@ Lynexus是一个**社区驱动的AI智能体平台**，使开发者能够创建�
 ## 🤝 社区与贡献
 
 #### 加入我们的社区
-- **论坛**：分享配置并获得帮助
-- **Discord**：实时讨论
+- **论坛**：分享配置并获得帮助（🚧 正在建设）
+- **Discord**：实时讨论（🚧 正在建设）
 - **GitHub问题**：报告错误和请求功能
 - **展示区**：分享您的优秀AI智能体
 
@@ -102,6 +102,6 @@ lynexus/
 - **贡献者**：每位帮助改进Lynexus的人
 - **用户**：感谢信任我们的AI开发需求
 
-<div align="center"> <p> <strong>由AI社区🫶为AI社区打造</strong> </p> <p> <a href="https://forum.lynexus.ai">论坛</a> • <a href="https://solynacversion.github.io/LyNexus">文档</a> • <a href="https://github.com/SolynAcVersion/LyNexus/issues">问题反馈</a> • <a href="https://github.com/SolynAcVersion/LyNexus/discussions">讨论区</a> </p> </div>
+<div align="center"> <p> <strong>由AI社区🫶为AI社区打造</strong> </p> <p> <a href="https://forum.lynexus.ai">论坛（🚧 正在建设）</a> • <a href="https://solynacversion.github.io/LyNexus">文档</a> • <a href="https://github.com/SolynAcVersion/LyNexus/issues">问题反馈</a> • <a href="https://github.com/SolynAcVersion/LyNexus/discussions">讨论区</a> </p> </div>
 <p align="center"></p>
 <div align="center"> <i>如果觉得这个项目有用，请给它一个⭐吧！</i> </div>

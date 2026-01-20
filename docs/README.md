@@ -9,7 +9,7 @@ Welcome to Lynexus! This guide is organized into two tracks to help you get star
 ## 📚 Choose Your Track
 
 - **🌱 Beginner Track** - Perfect if you're new to AI assistants or just want to use Lynexus without technical details
-- **⚡ Advanced Track** - For developers and users who want customization, programming, and integration
+- **⚡ [Advanced Track](#-advanced-track)** - For developers and users who want customization, programming, and integration
 
 ---
 
@@ -130,29 +130,23 @@ We've prepared a special package for beginners that includes ready-to-use tools!
 
 **How to use it (Super Easy!):**
 
-1. **Download the tools package** from [GitHub Releases](https://github.com/SolynAcVersion/LyNexus/releases)
+1. **Download the package** from [GitHub Releases](https://github.com/SolynAcVersion/LyNexus/releases)
    - Look for `prefab_file_operator.zip`
 
-2. **Extract the package** - You'll see:
-   - A `tools/` folder (containing `files.py` and `ocr.py`)
-   - A `prefab_file_operator.json` configuration file
-
-3. **Place the `tools/` folder** in your Lynexus directory:
-   - **If using `.exe`**: Put it in the same folder as `Lynexus.exe`
-   - **If using source code**: Put it in the project root directory
-
-4. **⚠️ For OCR functionality only**: Install and start Umi-OCR
+2. **⚠️ For OCR functionality only**: Install and start Umi-OCR
    - Download from: [Umi-OCR GitHub](https://github.com/hiroi-sora/Umi-OCR)
    - Run `\Umi-OCR\Umi-OCR.exe`
    - Make sure it's running on `127.0.0.1:1224` (default settings)
    - **Note**: OCR won't work without Umi-OCR running, but file operations will work fine
 
-5. **Load the configuration** (choose any method):
-   - **Method 1 - Drag & Drop (Easiest)**: Drag the `prefab_file_operator.json` file directly onto the chat list in the left sidebar
-   - **Method 2 - Import Button**: In the main window, click "Import Config" and select `prefab_file_operator.json`
-   - **Method 3 - Setup Wizard**: When starting Lynexus, click "Load Config File" and select `prefab_file_operator.json`
+3. **Load the configuration** (choose any method):
+   - **Method 1 - Drag & Drop (Easiest)**: Drag the `prefab_file_operator.zip` file directly onto the chat list in the left sidebar
+   - **Method 2 - Import Button**: In the main window, click "Import Config" and select `prefab_file_operator.zip`
+   - **Method 3 - Setup Wizard**: When starting Lynexus, click "Load Config File" and select `prefab_file_operator.zip`
 
-6. **That's it!** Now you can:
+   **That's it!** The program will automatically extract and configure everything for you.
+
+4. **You're all set!** Now you can:
    - Read files: "Read config.txt"
    - Create files: "Create a notes.txt file with my meeting notes"
    - Extract text from images: "Extract text from screenshot.png" (requires Umi-OCR running)
@@ -271,11 +265,11 @@ Once you're comfortable with basic chatting:
 
 1. **🎁 Download the Tools Package** - Give your AI superpowers!
    - Get it from [GitHub Releases](https://github.com/SolynAcVersion/LyNexus/releases)
-   - Look for `lynexus_tools.zip`
+   - Look for `prefab_file_operator.zip`
    - Follow the installation guide in [Step 5](#step-5-ai-commands-the-magic-part)
 
 2. **📦 Explore Presets** - Try different AI personalities
-   - Import the `prefab_file_operator.json` for file operations
+   - Import the `prefab_file_operator.zip` for file operations
    - Look for community presets on the forum
 
 3. **🔧 Customize Your Experience** - Fine-tune the AI
@@ -600,7 +594,7 @@ chat1.zip
 ### Community Preset Ecosystem
 
 **Find Presets:**
-- Browse the [community forum](https://forum.lynexus.ai)
+- Browse the [community forum](https://forum.lynexus.ai) (🚧 under construction)
 - Filter by category (coding, writing, research, etc.)
 - Read reviews and ratings
 - Download configurations that match your needs
@@ -613,7 +607,7 @@ chat1.zip
    - Key features
    - How to use it
    - Example prompts
-4. Upload to community forum
+4. Upload to community forum (🚧 under construction)
 5. **⚠️ REMEMBER**: Remove your API key before sharing!
 
 **Rate & Review:**
@@ -1287,9 +1281,9 @@ temperature=0.5, top_p=0.9, presence_penalty=0.3
 
 **Get Help:**
 - [Documentation](https://solynacversion.github.io/LyNexus)
-- [Community Forum](https://forum.lynexus.ai)
+- [Community Forum](https://forum.lynexus.ai) (🚧 under construction)
 - [GitHub Issues](https://github.com/SolynAcVersion/LyNexus/issues)
-- [Discord Server](https://discord.gg/lynexus)
+- [Discord Server](https://discord.gg/lynexus) (🚧 under construction)
 
 **Contribute:**
 - Share your presets

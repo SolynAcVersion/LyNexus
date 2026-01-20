@@ -32,7 +32,7 @@ Lynexus is a **community-driven AI agent platform** that empowers developers to 
 ### 🔄 **Community-Driven Ecosystem**
 - **One-Click Export**: Package your entire configuration for sharing
 - **One-Click Import**: Use others' optimized setups instantly
-- **Forum Integration**: Share & discover configurations on our community forum
+- **Forum Integration**: Share & discover configurations on our community forum (🚧 under construction)
 - **Stand on Giants' Shoulders**: Build upon community-tested configurations
 
 ### 🎨 **Modern Interface**
@@ -62,9 +62,9 @@ The documentation covers:
 ## 🤝 Community & Contribution
 
 #### Join Our Community
-- **Forum**: Share configurations and get help
+- **Forum**: Share configurations and get help (🚧 under construction)
 
-- **Discord**: Real-time discussions
+- **Discord**: Real-time discussions (🚧 under construction)
 
 - **GitHub Issues**: Report bugs and request features
 
@@ -112,4 +112,4 @@ This project is licensed under the Mozilla Public License 2.0 - see the [LICENSE
 
 - **Users**: For trusting us with your AI development needs
 
-<div align="center"> <p> <strong>Built with ❤️ by the AI community, for the AI community</strong> </p> <p> <a href="https://forum.lynexus.ai">Forum</a> • <a href="https://solynacversion.github.io/LyNexus">Documentation</a> • <a href="https://github.com/SolynAcVersion/LyNexus/issues">Issues</a> • <a href="https://github.com/SolynAcVersion/LyNexus/discussions">Discussions</a> </p> </div><p align="center"> <sub>Star ⭐ this repository if you find it useful!</sub> </p>
+<div align="center"> <p> <strong>Built with ❤️ by the AI community, for the AI community</strong> </p> <p> <a href="https://forum.lynexus.ai">Forum (🚧 under construction)</a> • <a href="https://solynacversion.github.io/LyNexus">Documentation</a> • <a href="https://github.com/SolynAcVersion/LyNexus/issues">Issues</a> • <a href="https://github.com/SolynAcVersion/LyNexus/discussions">Discussions</a> </p> </div><p align="center"> <sub>Star ⭐ this repository if you find it useful!</sub> </p>

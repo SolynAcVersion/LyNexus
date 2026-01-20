@@ -1,6 +1,6 @@
 # Lynexus AI助手 - 完整用户指南
 
-[English](./../README.md)
+[English](https://solynacversion.github.io/LyNexus/#/)
 
 欢迎使用 Lynexus！本指南分为两个轨道，帮助您快速上手，无论您是初学者还是高级用户。
 
@@ -9,7 +9,7 @@
 ## 📚 选择您的轨道
 
 - **🌱 初学者轨道** - 适合AI助手新手或只想使用Lynexus而不想了解技术细节的用户
-- **⚡ 高级轨道** - 适合开发者以及想要定制、编程和集成的用户
+- **⚡ [高级轨道](#-高级轨道)** - 适合开发者以及想要定制、编程和集成的用户
 
 ---
 
@@ -133,26 +133,20 @@ Lynexus可以在您的计算机上执行命令！方法如下：
 1. **下载工具包**，从 [GitHub Releases](https://github.com/SolynAcVersion/LyNexus/releases)
    - 查找 `prefab_file_operator.zip`
 
-2. **解压包** - 您会看到：
-   - 一个 `tools/` 文件夹（包含 `files.py` 和 `ocr.py`）
-   - 一个 `prefab_file_operator.json` 配置文件
-
-3. **将 `tools/` 文件夹**放在Lynexus目录中：
-   - **如果使用 `.exe`**：放在与 `Lynexus.exe` 相同的文件夹中
-   - **如果使用源代码**：放在项目根目录中
-
-4. **⚠️ 仅限 OCR 功能**：安装并启动 Umi-OCR
+2. **⚠️ 仅限 OCR 功能**：安装并启动 Umi-OCR
    - 下载地址：[Umi-OCR GitHub](https://github.com/hiroi-sora/Umi-OCR)
    - 运行 `\Umi-OCR\Umi-OCR.exe`
    - 确保运行在 `127.0.0.1:1224`（默认设置）
    - **注意**：没有运行 Umi-OCR 时 OCR 功能无法使用，但文件操作功能正常
 
-5. **加载配置**（任选一种方法）：
-   - **方法1 - 拖拽导入（最简单）**：直接将 `prefab_file_operator.json` 文件拖拽到左侧边栏的聊天列表上
-   - **方法2 - 导入按钮**：在主窗口中，点击"导入配置"并选择 `prefab_file_operator.json`
-   - **方法3 - 设置向导**：启动Lynexus时，点击"加载配置文件"并选择 `prefab_file_operator.json`
+3. **加载配置**（任选一种方法）：
+   - **方法1 - 拖拽导入（最简单）**：直接将 `prefab_file_operator.zip` 文件拖拽到左侧边栏的聊天列表上
+   - **方法2 - 导入按钮**：在主窗口中，点击"导入配置"并选择 `prefab_file_operator.zip`
+   - **方法3 - 设置向导**：启动Lynexus时，点击"加载配置文件"并选择 `prefab_file_operator.zip`
 
-6. **就这样！** 现在您可以：
+   **就这样！** 程序会自动解压并配置所有内容。
+
+4. **完成！** 现在您可以：
    - 读取文件："读取 config.txt"
    - 创建文件："创建一个包含我的会议记录的 notes.txt 文件"
    - 从图片提取文本："从 screenshot.png 提取文本"（需要运行 Umi-OCR）
@@ -600,7 +594,7 @@ chat1.zip
 ### 社区预设生态系统
 
 **查找预设：**
-- 浏览[社区论坛](https://forum.lynexus.ai)
+- 浏览[社区论坛](https://forum.lynexus.ai)（🚧 正在建设）
 - 按类别过滤（编程、写作、研究等）
 - 阅读评论和评分
 - 下载符合您需求的配置
@@ -613,7 +607,7 @@ chat1.zip
    - 主要功能
    - 如何使用
    - 示例提示
-4. 上传到社区论坛
+4. 上传到社区论坛（🚧 正在建设）
 5. **⚠️ 记住**：分享前删除您的API密钥！
 
 **评价和评论：**
@@ -1287,9 +1281,9 @@ temperature=0.5, top_p=0.9, presence_penalty=0.3
 
 **获取帮助：**
 - [文档](https://solynacversion.github.io/LyNexus)
-- [社区论坛](https://forum.lynexus.ai)
+- [社区论坛](https://forum.lynexus.ai)（🚧 正在建设）
 - [GitHub问题](https://github.com/SolynAcVersion/LyNexus/issues)
-- [Discord服务器](https://discord.gg/lynexus)
+- [Discord服务器](https://discord.gg/lynexus)（🚧 正在建设）
 
 **贡献：**
 - 分享您的预设
