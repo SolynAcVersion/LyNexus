@@ -1,12 +1,10 @@
 {
   "chat_list": [
-    "chat1",
-    "chat1_1",
-    "对话_1"
+    "prefab_file_operator"
   ],
   "app_settings": {
     "window_width": 1400,
     "window_height": 900,
-    "last_active_chat": "chat1"
+    "last_active_chat": "prefab_file_operator"
   }
 }

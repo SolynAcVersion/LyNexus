@@ -52,21 +52,66 @@ class ChatDataManager:
     def delete_chat_folder(self, chat_name: str) -> bool:
         """
         Delete a chat folder and all its contents
+        Also removes any legacy folders (conversations, ai_conv)
         Returns True if successful, False otherwise
         """
+        import os
+        safe_name = self._sanitize_chat_name(chat_name)
+        success = True
+
+        # Delete the main chat folder in data/
         chat_dir = self.get_chat_dir(chat_name)
-
-        if not chat_dir.exists():
+        if chat_dir.exists():
+            try:
+                shutil.rmtree(chat_dir)
+                print(f"[ChatData] Deleted chat folder: {chat_dir}")
+            except Exception as e:
+                print(f"[ChatData] Failed to delete chat folder: {e}")
+                success = False
+        else:
             print(f"[ChatData] Chat folder does not exist: {chat_dir}")
-            return False
 
-        try:
-            shutil.rmtree(chat_dir)
-            print(f"[ChatData] Deleted chat folder: {chat_dir}")
-            return True
-        except Exception as e:
-            print(f"[ChatData] Failed to delete chat folder: {e}")
-            return False
+        # Clean up legacy folders (conversations, ai_conv)
+        # Old paths that might still exist from previous versions
+        legacy_paths = [
+            Path("conversations") / safe_name,
+            Path("ai_conv") / f"{safe_name}_ai.json",
+            Path("ai_conv") / f"{safe_name}_ai.pickle",
+        ]
+
+        for legacy_path in legacy_paths:
+            if legacy_path.exists():
+                try:
+                    if legacy_path.is_file():
+                        legacy_path.unlink()
+                        print(f"[ChatData] Deleted legacy file: {legacy_path}")
+                    elif legacy_path.is_dir():
+                        shutil.rmtree(legacy_path)
+                        print(f"[ChatData] Deleted legacy folder: {legacy_path}")
+                except Exception as e:
+                    print(f"[ChatData] Failed to delete legacy path {legacy_path}: {e}")
+
+        # Also try to delete using the original chat name (not sanitized)
+        # in case the folder was created with the original name
+        legacy_paths_original = [
+            Path("conversations") / chat_name,
+            Path("ai_conv") / f"{chat_name}_ai.json",
+            Path("ai_conv") / f"{chat_name}_ai.pickle",
+        ]
+
+        for legacy_path in legacy_paths_original:
+            if legacy_path.exists():
+                try:
+                    if legacy_path.is_file():
+                        legacy_path.unlink()
+                        print(f"[ChatData] Deleted legacy file: {legacy_path}")
+                    elif legacy_path.is_dir():
+                        shutil.rmtree(legacy_path)
+                        print(f"[ChatData] Deleted legacy folder: {legacy_path}")
+                except Exception as e:
+                    print(f"[ChatData] Failed to delete legacy path {legacy_path}: {e}")
+
+        return success
 
     def chat_exists(self, chat_name: str) -> bool:
         """Check if a chat folder exists"""

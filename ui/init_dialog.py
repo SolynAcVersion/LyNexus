@@ -145,12 +145,13 @@ class InitDialog(QWidget):
             config_manager = ConfigManager()
             if self.DS_API_KEY:
                 config_manager.save_api_key(self.DS_API_KEY)
-            
-            # 保存非敏感配置
-            config_path = "configs/last_config.json"
-            os.makedirs("configs", exist_ok=True)
+
+            # 保存非敏感配置到 data 目录（不再使用 configs 文件夹）
+            config_path = "data/last_config.json"
+            os.makedirs("data", exist_ok=True)
             safe_config = config_data.copy()
-            del safe_config['api_key']
+            if 'api_key' in safe_config:
+                del safe_config['api_key']
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(safe_config, f, indent=2)
         

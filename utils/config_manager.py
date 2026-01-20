@@ -13,18 +13,16 @@ class ConfigManager:
     """Manages configuration files with relative path handling."""
 
     def __init__(self):
-        self.configs_dir = "configs"
+        self.configs_dir = "configs"  # Legacy, kept for backward compatibility
         self.ignore_file = ".confignore"
-        self.conversations_dir = "conversations"
-        self.history_dir = "chathistory"
+        self.conversations_dir = "conversations"  # Legacy, kept for backward compatibility
+        self.history_dir = "chathistory"  # Legacy, kept for backward compatibility
         self.app_config_file = "app_config.json"
         self.chat_data_manager = ChatDataManager()
 
-        # Create directories if they don't exist (for backward compatibility)
-        os.makedirs(self.configs_dir, exist_ok=True)
-        os.makedirs(self.conversations_dir, exist_ok=True)
-        os.makedirs(self.history_dir, exist_ok=True)
-        
+        # Do NOT create legacy directories anymore
+        # All data is now stored in data/{chat_name}/
+
         # Initialize app config if it doesn't exist
         self._init_app_config()
     
@@ -190,27 +188,33 @@ class ConfigManager:
             return False
     
     def save_chat_history(self, chat_records):
-        """Save chat history to pickle files."""
+        """Save chat history using ChatDataManager (data/chat_name/chat_his.pickle)."""
         for chat, messages in chat_records.items():
-            file_path = os.path.join(self.history_dir, f"{chat}.his")
             try:
-                with open(file_path, 'wb') as f:
-                    pickle.dump(messages, f)
+                self.chat_data_manager.save_chat_history(chat, messages)
             except Exception as e:
-                print(f"Error saving chat history: {e}")
-    
+                print(f"[ConfigManager] Error saving chat history for {chat}: {e}")
+
     def load_chat_history(self):
-        """Load chat history from pickle files."""
+        """Load chat history from data directory using ChatDataManager."""
         chat_records = {}
-        for file_name in os.listdir(self.history_dir):
-            if file_name.endswith('.his'):
-                chat_name = file_name[:-4]
-                file_path = os.path.join(self.history_dir, file_name)
-                try:
-                    with open(file_path, 'rb') as f:
-                        chat_records[chat_name] = pickle.load(f)
-                except Exception as e:
-                    print(f"Error loading chat history: {e}")
+        try:
+            # Get all chat folders from data directory
+            chat_names = self.chat_data_manager.list_all_chats()
+
+            for chat_name in chat_names:
+                # Load chat history from data/{chat_name}/chat_his.pickle
+                messages = self.chat_data_manager.load_chat_history(chat_name)
+                if messages is not None:
+                    chat_records[chat_name] = messages
+                else:
+                    # No history file exists, initialize with empty list
+                    chat_records[chat_name] = []
+
+            print(f"[ConfigManager] Loaded chat history for {len(chat_records)} chats from data/ directory")
+        except Exception as e:
+            print(f"[ConfigManager] Error loading chat history: {e}")
+
         return chat_records
     
     def save_chat_list(self, chat_list):

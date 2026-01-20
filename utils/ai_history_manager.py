@@ -6,10 +6,33 @@ All data is stored in data/{chat_name}/ directory structure
 """
 
 import json
+import os
 from pathlib import Path
 from typing import List, Dict, Optional
 
 from utils.chat_data_manager import ChatDataManager
+
+
+def _load_default_prompts() -> Dict:
+    """Load default prompts from configuration file"""
+    try:
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'default_prompts.json')
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[AIHistory] Failed to load default_prompts.json: {e}")
+
+    # Return minimal fallback if file doesn't exist
+    return {
+        "system_prompts": {
+            "fallback": "You are an AI assistant that can execute commands when requested."
+        },
+        "history_usage_guidance": "\n\n【Conversation History Usage Guidelines】\n1. **Reference Only**: Use conversation history only as a knowledge base for reference\n2. **Focus on Current Question**: Only answer what the user is currently asking\n"
+    }
+
+# Load once at module level
+_DEFAULT_PROMPTS = _load_default_prompts()
 
 
 class AIHistoryManager:
@@ -19,21 +42,9 @@ class AIHistoryManager:
     All data is stored in data/{chat_name}/ directory
     """
 
-    # Hidden history usage guidance (code-controlled, not user-visible)
-    HISTORY_USAGE_GUIDANCE = """
-
-【Conversation History Usage Guidelines】
-1. **Reference Only**: Use conversation history only as a knowledge base for reference
-2. **Focus on Current Question**: Only answer what the user is currently asking, unless explicitly requested to review or summarize previous conversations
-3. **Avoid Unnecessary Association**: Do not make assumptions or establish connections between unrelated conversations
-4. **No Retroactive Summarization**: When answering simple questions, do not summarize or evaluate the entire conversation session
-5. **Independent Responses**: Each response should focus on the current question, do not continuously reference or expand based on previous topics
-6. **Exception**: If the user explicitly requests a summary, review, or correlation analysis, follow the user's specific requirements
-"""
-
     def get_history_usage_guidance(self):
         """Get history usage guidance (in English for AI understanding)"""
-        return self.HISTORY_USAGE_GUIDANCE
+        return _DEFAULT_PROMPTS.get('history_usage_guidance', '')
 
     def __init__(self):
         self.chat_data_manager = ChatDataManager()
@@ -92,7 +103,7 @@ class AIHistoryManager:
             return loaded_history
         else:
             # Return default system prompt with history guidance
-            default_prompt = "You are an AI assistant that can execute commands when requested."
+            default_prompt = _DEFAULT_PROMPTS.get('system_prompts', {}).get('fallback', "You are an AI assistant that can execute commands when requested.")
             return [
                 {"role": "system", "content": default_prompt + self.get_history_usage_guidance()}
             ]

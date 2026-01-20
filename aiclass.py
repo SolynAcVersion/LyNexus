@@ -19,6 +19,51 @@ from openai import OpenAI
 from mcp_utils import MCPServerManager, load_mcp_conf
 
 
+def _load_default_prompts() -> Dict:
+    """Load default prompts from configuration file"""
+    try:
+        config_path = os.path.join(os.path.dirname(__file__), 'default_prompts.json')
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[AI] Failed to load default_prompts.json: {e}")
+
+    # Return minimal fallback if file doesn't exist
+    return {
+        "command_execution_prompt": "The command has been executed. Result:\n\n{result}\n\n",
+        "command_retry_prompt": "【COMMAND EXECUTION FAILED】\nError: {error}\n\n",
+        "final_summary_prompt": "You have reached the maximum number of iterations.\n",
+        "system_prompts": {
+            "default": "You are a helpful AI assistant."
+        },
+        "history_usage_guidance": ""
+    }
+
+
+def _load_default_config() -> Dict:
+    """Load default configuration values from configuration file"""
+    try:
+        config_path = os.path.join(os.path.dirname(__file__), 'default_config.json')
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[AI] Failed to load default_config.json: {e}")
+
+    # Return minimal fallback if file doesn't exist
+    return {
+        "api": {
+            "api_base": "https://api.deepseek.com",
+            "model": "deepseek-chat"
+        }
+    }
+
+# Load once at module level
+_DEFAULT_PROMPTS = _load_default_prompts()
+_DEFAULT_CONFIG = _load_default_config()
+
+
 class AI:
     """
     完整的AI助手类，支持流式、命令执行和完整历史管理
@@ -59,7 +104,7 @@ class AI:
                 final_summary_prompt=None):  # Removed redundant max_execution_iterations
 
         # 工具配置
-        self.mcp_paths = mcp_paths or []
+        self.mcp_paths = mcp_paths if mcp_paths is not None else []
         self.funcs = {}
         self.mcp_managers = {}  # 存储每个 server 的 MCPServerManager 实例
 
@@ -94,8 +139,8 @@ class AI:
 
         # API配置
         self.api_key = api_key
-        self.api_base = api_base or 'https://api.deepseek.com'
-        self.model = model or 'deepseek-chat'
+        self.api_base = api_base or _DEFAULT_CONFIG.get('api', {}).get('api_base', 'https://api.deepseek.com')
+        self.model = model or _DEFAULT_CONFIG.get('api', {}).get('model', 'deepseek-chat')
         self.client = None
 
         # 命令配置
@@ -104,86 +149,11 @@ class AI:
         self.max_iterations = max_iterations
 
         # 自定义提示词（从配置或使用默认值）
-        self.command_execution_prompt = command_execution_prompt or (
-            "The command has been executed. Result:\n\n"
-            "{result}\n\n"
-            "【DECISION REQUIRED】\n"
-            "CRITICAL: You must COMPLETELY ANSWER the user's question before stopping.\n\n"
-            "Choose ONE:\n"
-            "1. Output another YLDEXECUTE: line - if you need more information to COMPLETELY answer the question\n"
-            "2. Provide analysis/answer - ONLY if you have COMPLETELY answered the question with the ACTUAL answer\n\n"
-            "【IMPORTANT PRINCIPLES】\n"
-            "- Do NOT stop early just because a command succeeded\n"
-            "- Do NOT provide a partial answer or summary\n"
-            "- Continue executing commands until you have the ACTUAL answer\n"
-            "- The user wants the REAL answer, not suggestions or workarounds\n"
-            "- NEVER give manual instructions like 'you can run X yourself'\n\n"
-            "【FORBIDDEN RESPONSES】\n"
-            "- NEVER say: 'You can manually check by...'\n"
-            "- NEVER say: 'I suggest you try...'\n"
-            "- NEVER say: 'Due to limitations, please...'\n"
-            "- NEVER provide manual steps or workarounds\n"
-            "- NEVER stop without the actual answer\n\n"
-            "【EXAMPLES - WRONG】\n"
-            "User: 'What is my username?'\n"
-            "- WRONG: 'I attempted to find your username... Due to limitations, you can manually check by running echo %USERNAME%'\n"
-            "- WRONG: 'To find your username, you can: 1. Open cmd, 2. Run whoami...'\n"
-            "- WRONG: 'I cannot directly get your username. Please try...'\n\n"
-            "【EXAMPLES - CORRECT】\n"
-            "User: 'What is my username?'\n"
-            "- CORRECT: 'Your username is: 2300' (after actually finding it)\n"
-            "- CORRECT: (Keep trying: ls C:\\Users, then read the actual username from output)\n\n"
-            "User: 'List all Python files'\n"
-            "- WRONG: 'You can list files by running ls...'\n"
-            "- CORRECT: (Actually run ls and list the files)\n\n"
-            "【RULES】\n"
-            "- Do NOT display raw output\n"
-            "- If continuing: output ONLY YLDEXECUTE: line\n"
-            "- If done: provide COMPLETE, DIRECT answer using Markdown\n"
-            "- Keep trying different approaches until you succeed\n"
-            "- Use ALL available tools and methods\n"
-        )
+        self.command_execution_prompt = command_execution_prompt or _DEFAULT_PROMPTS.get('command_execution_prompt', '')
 
-        self.command_retry_prompt = command_retry_prompt or (
-            "【COMMAND EXECUTION FAILED】\n"
-            "Error: {error}\n\n"
-            "【REQUIRED ACTIONS】\n"
-            "1. Check the error message above\n"
-            "2. Output ONE YLDEXECUTE: instruction with:\n"
-            "   - Corrected command syntax, OR\n"
-            "   - Alternative tool/command that achieves the same goal\n\n"
-            "【CHECKLIST】\n"
-            "- Does the tool/command exist in the available tools list?\n"
-            "- Are parameters in correct format?\n"
-            "- Are file paths correct?\n"
-            "- Is there an alternative approach?\n\n"
-            "Output ONLY the next YLDEXECUTE: line. Do not provide explanations."
-        )
+        self.command_retry_prompt = command_retry_prompt or _DEFAULT_PROMPTS.get('command_retry_prompt', '')
 
-        self.final_summary_prompt = final_summary_prompt or (
-            "You have reached the maximum number of iterations. This is your LAST response.\n\n"
-            "CRITICAL: The user has NOT seen any previous responses.\n"
-            "Only THIS message will be visible to the user.\n\n"
-            "REQUIREMENTS:\n"
-            "1. Answer the user's ORIGINAL question directly\n"
-            "2. Use ALL information from command outputs\n"
-            "3. Give THE ACTUAL ANSWER, not a description\n"
-            "4. DO NOT format as 'Summary' or 'Results'\n"
-            "5. Just provide the answer the user asked for\n\n"
-            "EXAMPLES:\n"
-            "User asked: 'What is my username?'\n"
-            "You found in output: '2300'\n"
-            "You say: 'Your username is: 2300'\n\n"
-            "User asked: 'What files are on my desktop?'\n"
-            "You found: file1.txt, file2.pdf\n"
-            "You say: 'Your desktop contains:\n- file1.txt\n- file2.pdf'\n\n"
-            "DO NOT:\n"
-            "- Do NOT say '## Summary'\n"
-            "- Do NOT say '## Results'\n"
-            "- Do NOT describe what you did\n"
-            "- Do NOT say 'I executed commands to...'\n\n"
-            "Just give the answer the user wants. Now."
-        )
+        self.final_summary_prompt = final_summary_prompt or _DEFAULT_PROMPTS.get('final_summary_prompt', '')
 
         # 模型参数
         self.temperature = temperature
@@ -205,6 +175,9 @@ class AI:
             "start_time": None
         }
 
+        # 环境信息检测
+        self.env_info = self._detect_environment()
+
         # 停止标志
         self._stop_flag = False
 
@@ -214,25 +187,14 @@ class AI:
         # 加载MCP工具 - 必须在生成系统提示之前
         self.load_mcp_tools()
 
-        # 系统提示 - 使用有效的系统提示（包含工具描述）
-        # 注意：使用 get_effective_system_prompt() 而不是 get_complete_system_prompt()
+        # 系统提示 - 保存用户的原始 system_prompt（不包含 Markdown 规范）
         if system_prompt:
-            self.system_prompt = system_prompt
+            self.user_system_prompt = system_prompt
         else:
-            self.system_prompt = self.get_complete_system_prompt()
+            self.user_system_prompt = self.get_complete_system_prompt()
 
-        # 获取包含工具描述的有效系统提示
-        effective_prompt = self.get_effective_system_prompt()
-
-        # 调试：打印系统提示的前500个字符
-        print(f"[Debug] System prompt (first 500 chars): {effective_prompt[:500]}...")
-        if "【Available Tools】" in effective_prompt:
-            print("[Debug] Tools description FOUND in effective prompt")
-        else:
-            print("[Debug] WARNING: Tools description NOT FOUND in effective prompt!")
-
-        # 使用有效提示作为实际的系统提示
-        self.system_prompt = effective_prompt
+        # system_prompt 将在需要时动态组合（用户提示 + 工具描述 + Markdown 规范）
+        self.system_prompt = self.user_system_prompt
 
         # 重置对话历史（添加系统提示）
         self.reset_conversation()
@@ -248,6 +210,39 @@ class AI:
         safe_name = safe_name.replace(' ', '_')
         return safe_name or "default_chat"
 
+    def _detect_environment(self) -> Dict[str, str]:
+        """检测当前环境信息"""
+        import platform
+        env_info = {}
+
+        # 操作系统
+        env_info['os'] = platform.system()
+        env_info['os_release'] = platform.release()
+
+        # 用户名
+        env_info['username'] = os.path.expanduser('~').split(os.sep)[-1]
+
+        # 关键路径
+        home_dir = os.path.expanduser('~')
+        env_info['home_dir'] = home_dir
+
+        # 桌面路径
+        if env_info['os'] == 'Windows':
+            desktop_dir = os.path.join(os.path.expandvars('%USERPROFILE%'), 'Desktop')
+            if not os.path.exists(desktop_dir):
+                # 备选方案
+                desktop_dir = os.path.join(home_dir, 'Desktop')
+        else:
+            # Linux/Mac
+            desktop_dir = os.path.join(home_dir, 'Desktop')
+
+        env_info['desktop_dir'] = desktop_dir if os.path.exists(desktop_dir) else home_dir
+
+        # 当前工作目录
+        env_info['cwd'] = os.getcwd()
+
+        return env_info
+
     def get_complete_system_prompt(self):
         """返回完整的系统提示"""
         # 生成工具描述
@@ -256,6 +251,15 @@ class AI:
         # 基础系统提示
         base_prompt = f"""
 You are an AI assistant that can directly execute commands and call available tools.
+
+【CRITICAL: File Operations Workflow】
+When user asks about "my desktop", "my home directory", "my files", or any path-related question:
+1. FIRST call: YLDEXECUTE: get_system_info
+2. Parse the JSON result to get actual paths (desktop_dir, home_dir, etc.)
+3. THEN call the appropriate file operation function with the correct path
+4. Provide the final answer to the user
+
+DO NOT guess or assume paths. Always use get_system_info() first.
 
 【Core Principles】
 1. **Strict Response Mode**:
@@ -321,11 +325,13 @@ Wrong: {self.command_start} echo {self.command_separator} content {self.command_
 Please strictly follow these rules to ensure responses are concise, accurate, and meet actual user needs.
 """
 
-        # 如果有工具描述，添加到系统提示开头
+        # 组合完整的系统提示：工具描述 + 基础提示
+        full_prompt = base_prompt.strip()
+
         if tools_desc:
-            return tools_desc + "\n\n" + base_prompt.strip()
-        else:
-            return base_prompt.strip()
+            full_prompt = tools_desc + "\n\n" + base_prompt.strip()
+
+        return full_prompt
     
     # === MCP工具加载 ===
     
@@ -685,12 +691,114 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
 
         return desc
 
+    def _get_tool_description_reading_prompt(self) -> str:
+        """
+        获取硬编码的工具描述阅读要求提示词
+        这个提示词始终会被添加到系统提示中（当有工具启用时），确保 AI 仔细阅读工具描述
+        这是框架级逻辑，不涉及用户自定义内容
+        """
+        return """【CRITICAL: Tool Description Reading Requirements - MANDATORY】
+
+**MUST READ COMPLETE DESCRIPTIONS:**
+You MUST carefully read the ENTIRE description for EACH tool before using it.
+
+**PAY SPECIAL ATTENTION TO:**
+Sections marked with:
+- 'CRITICAL' or '**CRITICAL**'
+- 'MUST' or '**MUST**'
+- 'REQUIREMENT' or '**REQUIREMENT**'
+- 'WORKFLOW' or '**WORKFLOW**'
+- 'PREREQUISITE' or '**PREREQUISITE**'
+
+**WHY THIS MATTERS:**
+These highlighted sections contain CRITICAL information about:
+- Required setup steps BEFORE using the tool
+- Dependencies on OTHER tools that must be called FIRST
+- Correct usage patterns and parameter order
+- Common mistakes to AVOID
+- Multi-step workflows that MUST be followed
+
+**EXAMPLES OF CRITICAL WORKFLOWS:**
+- Some file operations REQUIRE calling get_system_info() FIRST
+- Some operations have specific prerequisite steps
+- Some tools depend on results from other tools
+
+**MANDATORY PRACTICE:**
+1. BEFORE calling any tool: Read its COMPLETE description
+2. Look for 'CRITICAL', 'MUST', 'REQUIREMENT' markers
+3. Follow documented workflows EXACTLY
+4. NEVER skip steps marked as 'REQUIRED' or 'MUST'
+5. If a description says "Call X first", ALWAYS call X first
+
+**CONSEQUENCES OF NOT READING:**
+Skipping these sections will cause operations to FAIL because you won't have:
+- Required information from prerequisite tools
+- Correct parameter values
+- Proper setup completed
+
+FAILURE TO FOLLOW TOOL DESCRIPTION WORKFLOWS WILL RESULT IN ERRORS."""
+
+    def _get_markdown_format_prompt(self) -> str:
+        """
+        获取硬编码的 Markdown 格式规范提示词
+        这个提示词始终会被添加到系统提示中，确保 AI 正确使用 Markdown 格式
+        """
+        return """【CRITICAL: Markdown Formatting Requirements - MANDATORY】
+
+**MANDATORY LINE BREAK RULES:**
+You MUST use actual newline characters (\\n) between different points, items, or sections.
+- NEVER cram multiple items into one paragraph
+- ALWAYS use \\n before each bullet point
+- ALWAYS use \\n before each numbered list item
+- ALWAYS use \\n between different sections
+
+**Correct Format:**
+```
+Here are the items:\\n
+- Item 1\\n
+- Item 2\\n
+- Item 3
+```
+
+**Wrong Format:**
+```
+Here are the items: - Item 1 - Item 2 - Item 3
+```
+
+**MANDATORY STRUCTURE:**
+1. Start with a brief summary (2-3 sentences max)
+2. Use ## for main sections
+3. Use - or * for bullet points (with \\n before each)
+4. Use numbered lists (1. 2. 3.) for steps (with \\n before each)
+5. Use ```language for code blocks
+6. End with a brief conclusion
+
+**LANGUAGE RULE:**
+Respond in the SAME language as the user's message (Chinese→Chinese, English→English).
+
+**Line Break Examples:**
+GOOD: "Found 5 files:\\n\\n1. file1.txt\\n2. file2.txt\\n3. file3.txt"
+BAD: "Found 5 files: 1. file1.txt 2. file2.txt 3. file3.txt"
+
+GOOD: "Categories:\\n\\n- Programming\\n- Tools\\n- Documents"
+BAD: "Categories: - Programming - Tools - Documents"
+
+**Code Format:**
+Always use triple backticks with language:
+```python
+print('hello')
+```
+
+VIOLATION OF THESE FORMATTING RULES WILL RESULT IN POOR USER EXPERIENCE.
+STRICTLY ENFORCE PROPER LINE BREAKS AND STRUCTURE IN EVERY RESPONSE."""
+
     def get_effective_system_prompt(self):
         """
         获取有效的系统提示
         将选中的 MCP 工具描述与用户 system_prompt 组合
+        注意：返回的提示词已经包含了硬编码的 Markdown 格式规范
         """
-        base_prompt = self.system_prompt
+        base_prompt = self.user_system_prompt  # 使用用户的原始提示，不包含 Markdown 规范
 
         # No debug output for system prompt generation (reduced verbosity)
 
@@ -748,13 +856,13 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
                 desc += "3. String values should NOT be quoted (unless they contain spaces)\n"
                 desc += "4. Use tools based on their descriptions and parameter requirements\n"
 
-                # 组合:工具描述 + \n\n + 用户 system_prompt
-                final_prompt = desc + "\n\n" + base_prompt
+                # 组合:工具描述 + \n\n + 框架级工具描述阅读要求 + 用户 system_prompt + 硬编码 Markdown 规范
+                final_prompt = desc + "\n\n" + self._get_tool_description_reading_prompt() + "\n\n" + base_prompt + "\n\n" + self._get_markdown_format_prompt()
 
                 return final_prompt
 
-        # No tools enabled, return base prompt only
-        return base_prompt
+        # No tools enabled, return 用户 system_prompt + 硬编码 Markdown 规范
+        return base_prompt + "\n\n" + self._get_markdown_format_prompt()
 
     def set_tool_enabled(self, tool_name: str, enabled: bool):
         """设置工具是否启用"""
@@ -789,15 +897,32 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
             self.api_key = os.environ.get("DEEPSEEK_API_KEY") or \
                           os.environ.get("OPENAI_API_KEY") or \
                           os.environ.get("ANTHROPIC_API_KEY")
-            
+
             if not self.api_key:
                 raise ValueError("No API key provided and no API key found in environment variables")
-        
+
+        # Disable proxy to avoid SSL/TLS issues
+        # This fixes the "[SSL: WRONG_VERSION_NUMBER]" error when using HTTP proxies
+        import httpx
+
+        # Create a mount that bypasses proxy for all URLs
+        no_proxy_mount = httpx.HTTPTransport(verify=True)
+
+        # Create client with custom mount
+        http_client = httpx.Client(
+            mounts={
+                "http://": no_proxy_mount,
+                "https://": no_proxy_mount,
+            },
+            timeout=60.0
+        )
+
         self.client = OpenAI(
             api_key=self.api_key,
-            base_url=self.api_base
+            base_url=self.api_base,
+            http_client=http_client
         )
-        print(f"[Info] API client initialized with model: {self.model}")
+        print(f"[Info] API client initialized with model: {self.model} (proxy disabled)")
     
     def set_stop_flag(self, value: bool):
         """设置停止标志"""
@@ -1484,9 +1609,46 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
                         break
                         
             except Exception as e:
+                import traceback
                 print(f"[AI] Stream API error: {e}")
-                error_msg = f"Error in stream processing: {str(e)}"
-                
+                print(f"[AI] Error type: {type(e).__name__}")
+                print(f"[AI] Traceback:\n{traceback.format_exc()}")
+
+                # Provide more helpful error message
+                error_msg = f"❌ **Connection Error**\n\n"
+                error_msg += f"**Error Details:**\n"
+                error_msg += f"- Type: {type(e).__name__}\n"
+                error_msg += f"- Message: {str(e)}\n\n"
+
+                # Check for common issues
+                error_str = str(e).lower()
+                if 'connection' in error_str or 'network' in error_str:
+                    error_msg += f"**Possible Causes:**\n"
+                    error_msg += f"- Network connection issue\n"
+                    error_msg += f"- API server is down or unreachable\n"
+                    error_msg += f"- Firewall or proxy blocking the connection\n"
+                    error_msg += f"- Incorrect API base URL\n\n"
+                    error_msg += f"**Suggestions:**\n"
+                    error_msg += f"- Check your internet connection\n"
+                    error_msg += f"- Verify API base URL: `{self.api_base}`\n"
+                    error_msg += f"- Try again later\n"
+                elif 'timeout' in error_str:
+                    error_msg += f"**Request timed out.**\n\n"
+                    error_msg += f"**Suggestions:**\n"
+                    error_msg += f"- Check your network speed\n"
+                    error_msg += f"- The API server might be overloaded\n"
+                    error_msg += f"- Try again later\n"
+                elif 'authentication' in error_str or '401' in error_str:
+                    error_msg += f"**Authentication failed.**\n\n"
+                    error_msg += f"**Suggestions:**\n"
+                    error_msg += f"- Check your API key\n"
+                    error_msg += f"- Verify your API key is valid\n"
+                elif 'rate' in error_str or '429' in error_str:
+                    error_msg += f"**Rate limit exceeded.**\n\n"
+                    error_msg += f"**Suggestions:**\n"
+                    error_msg += f"- Wait a moment and try again\n"
+                    error_msg += f"- Check your API usage limits\n"
+
                 if callback:
                     callback(error_msg)
                 else:
@@ -1510,11 +1672,11 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
         # 发送结束标记并明确完成生成器
         print("[AI] Stream processing completing, sending final empty chunk")
 
+        # 生成器结束前的日志（在yield之前执行，避免线程问题）
+        print("[AI] Generator completing, sending final empty chunk")
+
         # 最后一次yield，确保生成器结束
         yield ""
-
-        # 生成器结束后的清理（这部分在生成器被完全消费后执行）
-        print("[AI] Generator has been fully consumed and is now closed")
 
 
     def _process_user_inp_stream_internal(self, user_input: str, history: List[Dict], callback=None):
@@ -1956,14 +2118,17 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
     # === 配置方法 ===
     
     def update_system_prompt(self, new_prompt: str):
-        """更新系统提示"""
-        self.system_prompt = new_prompt
+        """更新系统提示（只更新用户的原始提示词）"""
+        self.user_system_prompt = new_prompt
+        # 生成完整的有效提示词（包含工具描述和 Markdown 规范）
+        effective_prompt = self.get_effective_system_prompt()
+        # 更新对话历史中的系统提示
         for i, msg in enumerate(self.conv_his):
             if msg.get("role") == "system":
-                self.conv_his[i]["content"] = new_prompt
+                self.conv_his[i]["content"] = effective_prompt
                 break
         else:
-            self.conv_his.insert(0, {"role": "system", "content": new_prompt})
+            self.conv_his.insert(0, {"role": "system", "content": effective_prompt})
     
     def update_config(self, config_dict: Dict):
         """从字典更新配置，不创建新实例"""
@@ -2021,10 +2186,10 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
         if 'max_iterations' in config_dict:
             self.max_iterations = config_dict['max_iterations']
         
-        # 更新系统提示
+        # 更新系统提示（只更新用户的原始提示词，不包含硬编码的 Markdown 规范）
         if 'system_prompt' in config_dict and config_dict['system_prompt']:
-            self.system_prompt = config_dict['system_prompt']
-            self.update_system_prompt(self.system_prompt)
+            self.user_system_prompt = config_dict['system_prompt']
+            self.update_system_prompt(self.user_system_prompt)
         
         # 更新MCP路径并重新加载工具
         if 'mcp_paths' in config_dict:
@@ -2068,15 +2233,15 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
         print(f"[AI] Configuration updated successfully, stream={self.stream}")
     
     def get_config(self) -> Dict:
-        """获取当前配置字典"""
+        """获取当前配置字典（返回用户的原始 system_prompt，不包含硬编码的 Markdown 规范）"""
         return {
             # API配置
             "api_base": self.api_base,
             "model": self.model,
-            
-            # 提示配置
-            "system_prompt": self.system_prompt,
-            
+
+            # 提示配置（只返回用户的原始提示，不包含 Markdown 规范）
+            "system_prompt": self.user_system_prompt,
+
             # 模型参数
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
@@ -2085,12 +2250,12 @@ Please strictly follow these rules to ensure responses are concise, accurate, an
             "stream": self.stream,
             "presence_penalty": self.presence_penalty,
             "frequency_penalty": self.frequency_penalty,
-            
+
             # 命令执行配置
             "command_start": self.command_start,
             "command_separator": self.command_separator,
             "max_iterations": self.max_iterations,
-            
+
             # 工具配置
             "mcp_paths": self._convert_paths_to_relative(self.mcp_paths.copy()),
             "available_tools": list(self.funcs.keys()),

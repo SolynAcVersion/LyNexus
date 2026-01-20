@@ -177,6 +177,85 @@ class DraggableListWidget(QListWidget):
         # Default behavior for non-ZIP files
         super().dropEvent(event)
 
+def _load_default_prompts() -> Dict:
+    """Load default prompts from configuration file"""
+    try:
+        config_path = os.path.join(os.path.dirname(__file__), '..', 'default_prompts.json')
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[Config] Failed to load default_prompts.json: {e}")
+
+    # Return minimal fallback if file doesn't exist
+    return {
+        "command_execution_prompt": "The command has been executed. Result:\n\n{result}\n\n",
+        "command_retry_prompt": "【COMMAND EXECUTION FAILED】\nError: {error}\n\n",
+        "final_summary_prompt": "You have reached the maximum number of iterations.\n",
+        "system_prompts": {
+            "default": "You are a helpful AI assistant."
+        },
+        "history_usage_guidance": ""
+    }
+
+
+def _load_default_config() -> Dict:
+    """Load default configuration values from configuration file"""
+    try:
+        config_path = os.path.join(os.path.dirname(__file__), '..', 'default_config.json')
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[Config] Failed to load default_config.json: {e}")
+
+    # Return minimal fallback if file doesn't exist
+    return {
+        "api": {
+            "api_base": "https://api.deepseek.com",
+            "model": "deepseek-chat"
+        },
+        "command_format": {
+            "command_start": "YLDEXECUTE:",
+            "command_separator": "￥|"
+        },
+        "model_parameters": {
+            "temperature": 1.0,
+            "max_tokens": 4096,
+            "top_p": 1.0,
+            "stream": True,
+            "presence_penalty": 0.0,
+            "frequency_penalty": 0.0
+        },
+        "execution": {
+            "max_iterations": 15
+        },
+        "mcp": {
+            "mcp_paths": [],
+            "enabled_mcp_tools": []
+        }
+    }
+
+
+# Load once at module level
+_DEFAULT_PROMPTS = _load_default_prompts()
+_DEFAULT_CONFIG = _load_default_config()
+
+
+def _get_config_value(path: str, fallback=None):
+    """
+    Get configuration value from default_config.json using dot notation
+    Example: _get_config_value('api.api_base', 'https://fallback.com')
+    """
+    keys = path.split('.')
+    value = _DEFAULT_CONFIG
+    for key in keys:
+        if isinstance(value, dict) and key in value:
+            value = value[key]
+        else:
+            return fallback
+    return value if value is not None else fallback
+
 @dataclass
 class ConversationConfig:
     """Configuration for a conversation session"""
@@ -195,66 +274,26 @@ class ConversationConfig:
     system_prompt: str = ""
 
     def __post_init__(self):
-        """Initialize default values for mutable fields"""
+        """Initialize default values for mutable fields and prompts from config"""
         if self.mcp_paths is None:
             self.mcp_paths = []
         if self.enabled_mcp_tools is None:
             self.enabled_mcp_tools = []
 
+        # Load prompts from default_prompts.json if not explicitly provided
+        # Check if prompts have their default values (empty strings would mean "use config file defaults")
+        # We use hasattr to detect if these were set at all
+        if not hasattr(self, '_prompts_initialized'):
+            self.command_execution_prompt = _DEFAULT_PROMPTS.get('command_execution_prompt', '')
+            self.command_retry_prompt = _DEFAULT_PROMPTS.get('command_retry_prompt', '')
+            self.final_summary_prompt = _DEFAULT_PROMPTS.get('final_summary_prompt', '')
+            self._prompts_initialized = True
+
     # Customizable prompts for command execution flow
-    command_execution_prompt: str = (
-        "The command has been executed. Result:\n\n"
-        "{result}\n\n"
-        "【DECISION REQUIRED】\n"
-        "Choose ONE:\n"
-        "1. Output another YLDEXECUTE: line - if you need more information\n"
-        "2. Provide analysis/answer - if you have sufficient information\n\n"
-        "【RULES】\n"
-        "- Do NOT display raw output\n"
-        "- If continuing: output ONLY YLDEXECUTE: line\n"
-        "- If done: provide direct answer using Markdown"
-    )
-
-    command_retry_prompt: str = (
-        "【COMMAND EXECUTION FAILED】\n"
-        "Error: {error}\n\n"
-        "【REQUIRED ACTIONS】\n"
-        "1. Check the error message above\n"
-        "2. Output ONE YLDEXECUTE: instruction with:\n"
-        "   - Corrected command syntax, OR\n"
-        "   - Alternative tool/command that achieves the same goal\n\n"
-        "【CHECKLIST】\n"
-        "- Does the tool/command exist in the available tools list?\n"
-        "- Are parameters in correct format?\n"
-        "- Are file paths correct?\n"
-        "- Is there an alternative approach?\n\n"
-        "Output ONLY the next YLDEXECUTE: line. Do not provide explanations."
-    )
-
-    final_summary_prompt: str = (
-        "You have reached the maximum number of iterations. This is your LAST response.\n\n"
-        "CRITICAL: The user has NOT seen any previous responses.\n"
-        "Only THIS message will be visible to the user.\n\n"
-        "REQUIREMENTS:\n"
-        "1. Answer the user's ORIGINAL question directly\n"
-        "2. Use ALL information from command outputs\n"
-        "3. Give THE ACTUAL ANSWER, not a description\n"
-        "4. DO NOT format as 'Summary' or 'Results'\n"
-        "5. Just provide the answer the user asked for\n\n"
-        "EXAMPLES:\n"
-        "User asked: 'What is my username?'\n"
-        "You found in output: '2300'\n"
-        "You say: 'Your username is: 2300'\n\n"
-        "User asked: 'What files are on my desktop?'\n"
-        "You found: file1.txt, file2.pdf\n"
-        "You say: 'Your desktop contains:\n- file1.txt\n- file2.pdf'\n\n"
-        "DO NOT:\n"
-        "- Do NOT say '## Summary'\n"
-        "- Do NOT say '## Results'\n"
-        "- Do NOT describe what you did\n"
-        "- Do NOT say 'I executed commands to...'\n\n"
-        "Just give the answer the user wants. Now."
-    )
+    # These will be initialized in __post_init__ from default_prompts.json
+    command_execution_prompt: str = ""  # Will be set from default_prompts.json
+    command_retry_prompt: str = ""      # Will be set from default_prompts.json
+    final_summary_prompt: str = ""      # Will be set from default_prompts.json
 
 
 @dataclass
@@ -353,13 +392,27 @@ class ConversationContextManager:
             if not config.api_key:
                 return None
 
+            # Show loading progress bar before creating AI
+            if hasattr(self, 'loading_progress') and self.loading_progress:
+                self.loading_progress.setVisible(True)
+                # Force UI update
+                QApplication.processEvents()
+
             # Pass conversation_name to create_ai_instance
             ai_instance = self.create_ai_instance(config, conversation_name)
             self.conversation_ais[conversation_name] = ai_instance
+
+            # Hide loading progress bar after AI is ready
+            if hasattr(self, 'loading_progress') and self.loading_progress:
+                self.loading_progress.setVisible(False)
+
             return ai_instance
 
         except Exception as e:
             print(f"[ContextManager] Failed to create AI instance: {e}")
+            # Hide loading progress on error
+            if hasattr(self, 'loading_progress') and self.loading_progress:
+                self.loading_progress.setVisible(False)
             return None
     
     def load_conversation_config(self, conversation_name: str) -> ConversationConfig:
@@ -379,17 +432,17 @@ class ConversationContextManager:
         if config_data:
             config = ConversationConfig(
                 api_key=api_key,
-                api_base=config_data.get('api_base', 'https://api.deepseek.com'),
-                model=config_data.get('model', 'deepseek-chat'),
-                temperature=config_data.get('temperature', 1.0),
+                api_base=config_data.get('api_base', _get_config_value('api.api_base')),
+                model=config_data.get('model', _get_config_value('api.model')),
+                temperature=config_data.get('temperature', _get_config_value('model_parameters.temperature')),
                 max_tokens=config_data.get('max_tokens'),
-                top_p=config_data.get('top_p', 1.0),
-                stream=config_data.get('stream', True),
-                command_start=config_data.get('command_start', 'YLDEXECUTE:'),
-                command_separator=config_data.get('command_separator', '￥|'),
-                max_iterations=config_data.get('max_iterations', 15),
-                mcp_paths=config_data.get('mcp_paths', []),
-                enabled_mcp_tools=config_data.get('enabled_mcp_tools', []),
+                top_p=config_data.get('top_p', _get_config_value('model_parameters.top_p')),
+                stream=config_data.get('stream', _get_config_value('model_parameters.stream')),
+                command_start=config_data.get('command_start', _get_config_value('command_format.command_start')),
+                command_separator=config_data.get('command_separator', _get_config_value('command_format.command_separator')),
+                max_iterations=config_data.get('max_iterations', _get_config_value('execution.max_iterations')),
+                mcp_paths=config_data.get('mcp_paths', _get_config_value('mcp.mcp_paths', [])),
+                enabled_mcp_tools=config_data.get('enabled_mcp_tools', _get_config_value('mcp.enabled_mcp_tools', [])),
                 system_prompt=config_data.get('system_prompt', ''),
                 command_execution_prompt=config_data.get(
                     'command_execution_prompt',
@@ -407,9 +460,9 @@ class ConversationContextManager:
         else:
             config = ConversationConfig(
                 api_key=api_key,
-                system_prompt="You are a helpful AI assistant. Be concise and clear in your responses."
+                system_prompt=_DEFAULT_PROMPTS.get('system_prompts', {}).get('default', "You are a helpful AI assistant.")
             )
-        
+
         self.conversation_configs[conversation_name] = config
         return config
     
@@ -426,7 +479,7 @@ class ConversationContextManager:
             'command_start': config.command_start,
             'command_separator': config.command_separator,
             'max_iterations': config.max_iterations,
-            'mcp_paths': config.mcp_paths,
+            'mcp_paths': config.mcp_paths if config.mcp_paths is not None else [],
             'system_prompt': config.system_prompt,
             # Pass custom prompts
             'command_execution_prompt': config.command_execution_prompt,
@@ -436,8 +489,8 @@ class ConversationContextManager:
             'chat_name': conversation_name or 'default'
         }
 
-        # Remove None values
-        ai_kwargs = {k: v for k, v in ai_kwargs.items() if v is not None}
+        # Remove None values (but keep empty lists)
+        ai_kwargs = {k: v for k, v in ai_kwargs.items() if v is not None and v != ''}
 
         ai_instance = AI(**ai_kwargs)
 
@@ -451,6 +504,16 @@ class ConversationContextManager:
     def clear_conversation(self, conversation_name: str):
         """Clear conversation data"""
         if conversation_name in self.conversation_ais:
+            # Clean up MCP servers BEFORE deleting AI instance to avoid thread errors
+            ai_instance = self.conversation_ais[conversation_name]
+            try:
+                if hasattr(ai_instance, 'cleanup_mcp_servers'):
+                    ai_instance.cleanup_mcp_servers()
+                    print(f"[ContextManager] Cleaned up MCP servers for {conversation_name}")
+            except Exception as e:
+                print(f"[ContextManager] Error cleaning up MCP servers: {e}")
+
+            # Now delete the AI instance
             del self.conversation_ais[conversation_name]
         if conversation_name in self.conversation_configs:
             del self.conversation_configs[conversation_name]
@@ -1268,7 +1331,7 @@ class ModernChatBox(QWidget):
         
         # State
         self.current_state = ProcessingState.IDLE
-        self.current_conversation = i18n.tr("general_chat")
+        self.current_conversation = None  # Will be set when loading chats
         
         # UI references
         self.current_stream_bubble = None
@@ -1280,7 +1343,7 @@ class ModernChatBox(QWidget):
         self.processing_thread_pool = ThreadPoolExecutor(max_workers=2)
         
         # Data
-        self.chat_list_names = self.config_manager.load_chat_list() or [i18n.tr("general_chat")]
+        self.chat_list_names = self.config_manager.load_chat_list() or []
         self.chat_records = self.config_manager.load_chat_history()
         
         # Dialogs
@@ -1289,6 +1352,24 @@ class ModernChatBox(QWidget):
         
         # Initialize
         self._initialize_ui()
+
+        # Load chat list (will show empty state if no chats)
+        self._load_chat_list_to_ui()
+
+        # Load first chat if available
+        if self.chat_list_names:
+            # Get last active chat from config or first chat
+            last_active = self.config_manager.load_last_active_chat()
+            if last_active and last_active in self.chat_list_names:
+                items = self.chat_list.findItems(last_active, Qt.MatchFlag.MatchExactly)
+                if items:
+                    self.switch_chat_target(items[0])
+            elif self.chat_list_names:
+                # Load first chat
+                items = self.chat_list.findItems(self.chat_list_names[0], Qt.MatchFlag.MatchExactly)
+                if items:
+                    self.switch_chat_target(items[0])
+
         self._initialize_ai()
 
         # Connect signals
@@ -1720,26 +1801,77 @@ class ModernChatBox(QWidget):
                 padding: 8px 16px;
             }
         """)
-        
+
+        # Create loading progress bar (indeterminate)
+        self.loading_progress = QProgressBar()
+        self.loading_progress.setRange(0, 0)  # Indeterminate mode
+        self.loading_progress.setMaximumWidth(200)
+        self.loading_progress.setMaximumHeight(16)
+        self.loading_progress.setTextVisible(False)
+        self.loading_progress.setStyleSheet("""
+            QProgressBar {
+                border: none;
+                background-color: transparent;
+                border-radius: 8px;
+            }
+            QProgressBar::chunk {
+                background-color: #4A9CFF;
+                border-radius: 8px;
+            }
+        """)
+        self.loading_progress.setVisible(False)
+
+        # Add progress bar to status bar
+        status_bar.addPermanentWidget(self.loading_progress)
+
         status_bar.showMessage("Lynexus AI | Not connected")
         return status_bar
     
     def _load_chat_list_to_ui(self):
         """Load chat list to UI"""
         self.chat_list.clear()
-        
+
+        # Show empty state if no chats
+        if not self.chat_list_names:
+            self._show_empty_state()
+            return
+
         for name in self.chat_list_names:
             item = QListWidgetItem(name)
             item.setData(Qt.UserRole, name)
-            
+
             if name not in self.chat_records:
                 self.chat_records[name] = []
-            
+
             self.chat_list.addItem(item)
-            
-            if name not in self.chat_list_names:
-                self.chat_list_names.append(name)
-                self.config_manager.save_chat_list(self.chat_list_names)
+
+    def _show_empty_state(self):
+        """Show empty state when no conversations exist"""
+        self.chat_list.clear()
+        self.current_conversation = None
+        self.chat_title.setText("")
+
+        # Clear message display
+        self._clear_message_display()
+
+        # Show empty state message in message area
+        empty_message = QLabel(
+            "📝 No conversations yet\n\n"
+            "Click 'New Chat' to create your first conversation"
+        )
+        empty_message.setAlignment(Qt.AlignCenter)
+        empty_message.setStyleSheet("""
+            QLabel {
+                color: #666666;
+                font-size: 16px;
+                padding: 40px;
+                background-color: transparent;
+            }
+        """)
+
+        # Add empty message to display
+        self.message_layout.insertWidget(0, empty_message)
+        self.message_container.adjustSize()
     
     # ============================================================================
     # MESSAGE PROCESSING
@@ -2512,6 +2644,13 @@ class ModernChatBox(QWidget):
             # Delete chat folder and all its contents
             self.chat_data_manager.delete_chat_folder(deleted_conversation)
 
+            # Clear current conversation
+            self.current_conversation = None
+            self.chat_title.setText("")
+
+            # Clear message display
+            self._clear_message_display()
+
             # Save updated config
             self.config_manager.save_chat_history(self.chat_records)
             self.config_manager.save_chat_list(self.chat_list_names)
@@ -2519,17 +2658,16 @@ class ModernChatBox(QWidget):
             # Reload chat list UI
             self._load_chat_list_to_ui()
 
-            # Switch to first available chat or create new one
-            if self.chat_list_names:
+            # Show empty state if no chats left
+            if not self.chat_list_names:
+                self._show_empty_state()
+            else:
+                # Switch to first available chat
                 first_chat = self.chat_list_names[0]
                 if first_chat:
                     items = self.chat_list.findItems(first_chat, Qt.MatchFlag.MatchExactly)
                     if items:
                         self.switch_chat_target(items[0])
-            else:
-                # Create a new default chat
-                self._add_new_chat()
-                self._load_chat_list_to_ui()
 
             print(f"[ModernChatBox] Deleted conversation: {deleted_conversation}")
     
@@ -2718,10 +2856,21 @@ class ModernChatBox(QWidget):
         """Load and display conversation messages"""
         if conversation_name in self.chat_records:
             messages = self.chat_records[conversation_name]
-            
+
+            # Ensure messages is a list
+            if not isinstance(messages, list):
+                print(f"[ModernChatBox] Warning: chat_records[{conversation_name}] is not a list: {type(messages)}")
+                messages = []
+                self.chat_records[conversation_name] = messages
+
             self.message_container.setUpdatesEnabled(False)
-            
+
             for msg in messages:
+                # Ensure msg is a dict
+                if not isinstance(msg, dict):
+                    print(f"[ModernChatBox] Warning: message is not a dict: {type(msg)}")
+                    continue
+
                 # Get timestamp
                 timestamp = msg.get("timestamp", "")
                 if timestamp:
@@ -2763,20 +2912,55 @@ class ModernChatBox(QWidget):
             self.message_container.adjustSize()
             QTimer.singleShot(50, self._scroll_to_bottom)
     
+    def _create_new_chat_programmatically(self) -> str:
+        """
+        Create a new default chat programmatically (without user dialog)
+        Returns the name of the created chat, or empty string if failed
+        """
+        # Generate a default name
+        import time
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        default_name = f"new_chat_{timestamp}"
+
+        try:
+            # Add to chat list
+            self.chat_list_names.append(default_name)
+            self.config_manager.save_chat_list(self.chat_list_names)
+
+            # Create chat folder structure
+            chat_dir = self.chat_data_manager.get_chat_dir(default_name)
+            chat_dir.mkdir(parents=True, exist_ok=True)
+
+            # Initialize chat record as empty list (not dict!)
+            self.chat_records[default_name] = []
+            self.config_manager.save_chat_history(self.chat_records)
+
+            # Add to UI
+            item = QListWidgetItem(default_name)
+            item.setData(Qt.UserRole, default_name)
+            self.chat_list.addItem(item)
+
+            print(f"[ModernChatBox] Created new default chat: {default_name}")
+            return default_name
+
+        except Exception as e:
+            print(f"[ModernChatBox] Failed to create new chat: {e}")
+            return ""
+
     def _add_new_chat(self):
         """Add new chat"""
         name, ok = QInputDialog.getText(self, "New Chat", "Enter chat name:")
-        
+
         if ok and name:
             # Add to UI
             item = QListWidgetItem(name)
             item.setData(Qt.UserRole, name)
             self.chat_list.addItem(item)
-            
+
             if name not in self.chat_list_names:
                 self.chat_list_names.append(name)
                 self.config_manager.save_chat_list(self.chat_list_names)
-            
+
             # Select new chat
             items = self.chat_list.findItems(name, Qt.MatchExactly)
             if items:
@@ -2790,14 +2974,15 @@ class ModernChatBox(QWidget):
     def _initialize_ai(self):
         """Initialize AI"""
         api_key = self.config_manager.load_api_key()
-        
+
         if not api_key and not (os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY")):
             # Show init dialog
             QTimer.singleShot(500, self._show_init_dialog)
         else:
-            # Load AI for current conversation
-            self.context_manager.get_ai_for_conversation(self.current_conversation)
-            
+            # Load AI for current conversation (if exists)
+            if self.current_conversation:
+                self.context_manager.get_ai_for_conversation(self.current_conversation)
+
             has_api_key = bool(api_key)
             self.send_button.setEnabled(has_api_key)
             self._update_status_bar()

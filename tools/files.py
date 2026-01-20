@@ -12,7 +12,65 @@ according to Python string rules, where \\n represents a newline character.
 
 import os
 import shutil
+import platform
 from typing import Union, List, Dict
+
+
+def get_system_info() -> str:
+    """
+    Get current system environment information.
+
+    **CRITICAL**: Call this function FIRST before any file operations to understand:
+    - Current operating system (Windows/Linux/Mac)
+    - Current username
+    - Home directory path
+    - Desktop directory path
+    - Current working directory
+
+    This information is essential for constructing correct file paths.
+
+    Example call:
+    get_system_info()
+    Returns: JSON string with system info like:
+    {
+        "os": "Windows",
+        "username": "2300",
+        "home_dir": "C:\\Users\\2300",
+        "desktop_dir": "C:\\Users\\2300\\Desktop",
+        "cwd": "C:\\Users\\2300\\Desktop\\mcpPro\\LyNexus"
+    }
+
+    IMPORTANT: All file operations should use paths from this function.
+    """
+    import json
+
+    info = {}
+
+    # Operating system
+    info['os'] = platform.system()
+    info['os_release'] = platform.release()
+
+    # Username
+    info['username'] = os.path.expanduser('~').split(os.sep)[-1]
+
+    # Key paths
+    home_dir = os.path.expanduser('~')
+    info['home_dir'] = home_dir
+
+    # Desktop path
+    if info['os'] == 'Windows':
+        desktop_dir = os.path.join(os.path.expandvars('%USERPROFILE%'), 'Desktop')
+        if not os.path.exists(desktop_dir):
+            desktop_dir = os.path.join(home_dir, 'Desktop')
+    else:
+        desktop_dir = os.path.join(home_dir, 'Desktop')
+
+    info['desktop_dir'] = desktop_dir if os.path.exists(desktop_dir) else home_dir
+
+    # Current working directory
+    info['cwd'] = os.getcwd()
+
+    return json.dumps(info, ensure_ascii=False, indent=2)
 
 
 def mv(source: str, destination: str) -> str:
@@ -81,9 +139,15 @@ def ls(directory: str = ".") -> str:
     """
     List all files and subdirectories in the specified directory.
 
+    **CRITICAL REQUIREMENT**: Call get_system_info() FIRST to understand the system paths!
+    The user's question may reference "my desktop", "my home", etc. Use get_system_info() to get actual paths.
+
     Parameters:
     - directory: The directory path to list (string, optional, defaults to ".")
       Example values: "/home/user/documents" or "C:\\Users\\user\\Documents" or "."
+
+      **IMPORTANT**: When user asks about "my desktop", "my home directory", or "my files",
+      you MUST first call get_system_info() to get the actual paths, then use those paths.
 
     Returns:
     - String listing the directory contents
@@ -94,6 +158,12 @@ def ls(directory: str = ".") -> str:
     Example call:
     ls("/home/user/documents")
     Returns: "Contents of /home/user/documents: file1.txt, file2.pdf, folder1"
+
+    **WORKFLOW FOR "MY DESKTOP" QUESTIONS**:
+    1. First: YLDEXECUTE: get_system_info
+    2. Parse the result to get desktop_dir
+    3. Then: YLDEXECUTE: ls | {desktop_dir from step 1}
+    4. Provide final answer to user with actual desktop contents
     """
     if not os.path.exists(directory):
         raise FileNotFoundError(f"Directory not found: {directory}")
