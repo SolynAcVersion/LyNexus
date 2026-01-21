@@ -354,12 +354,9 @@ class SettingsDialog(QWidget):
             self.api_base_edit.setText(config.get('api_base', 'https://api.deepseek.com'))
             self.model_edit.setText(config.get('model', 'deepseek-chat'))
 
-            # Load API key from .confignore
-            api_key = self.config_manager.load_api_key()
-            if api_key:
-                self.api_key_edit.setText(api_key)
-            elif hasattr(self.ai, 'api_key'):
-                self.api_key_edit.setText(getattr(self.ai, 'api_key', ''))
+            # Load API key from .confignore (always read fresh from file)
+            api_key = self.config_manager.load_api_key(self.conversation_name)
+            self.api_key_edit.setText(api_key or '')
 
             # Model parameters - handle None values safely
             self.temp_spin.setValue(config.get('temperature', 1.0))
@@ -399,12 +396,9 @@ class SettingsDialog(QWidget):
             if 'model' in config:
                 self.model_edit.setText(config['model'])
             
-            # Load API key from .confignore first
-            api_key = self.config_manager.load_api_key()
-            if api_key:
-                self.api_key_edit.setText(api_key)
-            elif 'api_key' in config:
-                self.api_key_edit.setText(config['api_key'])
+            # Load API key from .confignore (always read fresh from file)
+            api_key = self.config_manager.load_api_key(self.conversation_name)
+            self.api_key_edit.setText(api_key or '')
             
             # Model parameters - handle None values safely
             if 'temperature' in config:
@@ -548,11 +542,13 @@ class SettingsDialog(QWidget):
 
             # Save API key to .confignore if provided
             if settings['api_key']:
-                self.config_manager.save_api_key(settings['api_key'])
+                self.config_manager.save_api_key(settings['api_key'], self.conversation_name)
 
-            # Save conversation-specific configuration
+            # Save conversation-specific configuration (without api_key - it's in .confignore)
             if self.conversation_name:
-                self.config_manager.save_conversation_config(self.conversation_name, settings)
+                # Remove api_key from settings before saving to settings.json
+                settings_for_json = {k: v for k, v in settings.items() if k != 'api_key'}
+                self.config_manager.save_conversation_config(self.conversation_name, settings_for_json)
 
             # Emit settings for the parent to update the existing AI instance
             self.sig_save_settings.emit(settings)

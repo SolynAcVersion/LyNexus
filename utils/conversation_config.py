@@ -40,27 +40,37 @@ class ConversationConfig:
         return safe_name or "default_chat"
 
     def _load_config(self) -> Dict:
-        """加载配置文件（只存储 api_key）"""
+        """加载配置文件（从 .confignore 读取 key=value 格式）"""
         if not self.config_file.exists():
-            # 创建默认配置（只包含 api_key）
-            default_config = {
-                "api_key": ""
-            }
-            self._save_config(default_config)
-            return default_config
+            return {}
 
         try:
             with open(self.config_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                content = f.read().strip()
+
+                # Try JSON format first (for backward compatibility)
+                try:
+                    return json.loads(content)
+                except json.JSONDecodeError:
+                    # If not JSON, parse as key=value format
+                    config = {}
+                    for line in content.split('\n'):
+                        line = line.strip()
+                        if '=' in line:
+                            key, value = line.split('=', 1)
+                            config[key.strip()] = value.strip()
+                    return config
         except Exception as e:
             print(f"[ConversationConfig] Failed to load config: {e}")
             return {}
 
     def _save_config(self, config: Dict) -> bool:
-        """保存配置到文件"""
+        """保存配置到文件（保存为 key=value 格式）"""
         try:
             with open(self.config_file, 'w', encoding='utf-8') as f:
-                json.dump(config, f, ensure_ascii=False, indent=2)
+                # Write in key=value format
+                for key, value in config.items():
+                    f.write(f"{key}={value}\n")
             return True
         except Exception as e:
             print(f"[ConversationConfig] Failed to save config: {e}")
@@ -78,7 +88,9 @@ class ConversationConfig:
         return self._save_config(self.config_data)
 
     def get_api_key(self) -> str:
-        """获取 API key"""
+        """获取 API key（每次直接从文件读取）"""
+        # Reload config from file to get fresh value
+        self.config_data = self._load_config()
         return self.get("api_key", "")
 
     def set_api_key(self, api_key: str) -> bool:
@@ -106,7 +118,7 @@ class ConversationConfigManager:
 
     def get_config(self, chat_name: str) -> ConversationConfig:
         """
-        获取或创建会话配置
+        获取会话配置（每次创建新实例，确保从文件读取最新值）
 
         Args:
             chat_name: 会话名称
@@ -114,9 +126,8 @@ class ConversationConfigManager:
         Returns:
             ConversationConfig 实例
         """
-        if chat_name not in self._configs:
-            self._configs[chat_name] = ConversationConfig(chat_name)
-        return self._configs[chat_name]
+        # Always create new instance to read fresh from file
+        return ConversationConfig(chat_name)
 
     def list_all_conversations(self) -> List[str]:
         """列出所有已存在的会话"""

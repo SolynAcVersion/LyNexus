@@ -123,12 +123,6 @@ class AI:
                 config_manager = get_global_config_manager()
                 self.conversation_config = config_manager.get_config(chat_name)
 
-                # 从配置文件加载 API key (如果未提供)
-                if not api_key:
-                    api_key = self.conversation_config.get_api_key()
-                    if api_key:
-                        print(f"[AI] Loaded API key from conversation config: {chat_name}")
-
                 # 从配置文件加载其他配置
                 if not api_base:
                     api_base = self.conversation_config.get_api_base()
@@ -137,8 +131,8 @@ class AI:
             except Exception as e:
                 print(f"[AI] Failed to load conversation config: {e}")
 
-        # API配置
-        self.api_key = api_key
+        # API配置 - api_key 不存储，每次从文件读取
+        self._api_key_param = api_key  # 仅用于判断是否提供了参数
         self.api_base = api_base or _DEFAULT_CONFIG.get('api', {}).get('api_base', 'https://api.deepseek.com')
         self.model = model or _DEFAULT_CONFIG.get('api', {}).get('model', 'deepseek-chat')
         self.client = None
@@ -198,8 +192,26 @@ class AI:
 
         # 重置对话历史（添加系统提示）
         self.reset_conversation()
-        
+
         print(f"[AI] 初始化完成，加载了 {len(self.funcs)} 个工具，stream={self.stream}")
+
+    @property
+    def api_key(self) -> str:
+        """获取 API key（每次从 .confignore 文件读取）"""
+        # 1. 如果 conversation_config 存在，优先从文件读取
+        if self.conversation_config:
+            key = self.conversation_config.get_api_key()
+            if key:
+                return key
+
+        # 2. 尝试从参数获取（初始化时提供的）
+        if self._api_key_param:
+            return self._api_key_param
+
+        # 3. 回退到环境变量
+        return os.environ.get("DEEPSEEK_API_KEY") or \
+               os.environ.get("OPENAI_API_KEY") or \
+               os.environ.get("ANTHROPIC_API_KEY") or ""
 
     def _sanitize_name(self, name: str) -> str:
         """清理会话名称，用作文件夹名"""
@@ -892,14 +904,11 @@ STRICTLY ENFORCE PROPER LINE BREAKS AND STRUCTURE IN EVERY RESPONSE."""
     
     def init_ai_client(self):
         """初始化AI客户端"""
-        if not self.api_key:
-            # 尝试各种环境变量
-            self.api_key = os.environ.get("DEEPSEEK_API_KEY") or \
-                          os.environ.get("OPENAI_API_KEY") or \
-                          os.environ.get("ANTHROPIC_API_KEY")
+        # api_key 现在是 property，会自动从 .confignore 文件读取
+        api_key = self.api_key  # 通过 property 获取
 
-            if not self.api_key:
-                raise ValueError("No API key provided and no API key found in environment variables")
+        if not api_key:
+            raise ValueError("No API key found in .confignore or environment variables")
 
         # Disable proxy to avoid SSL/TLS issues
         # This fixes the "[SSL: WRONG_VERSION_NUMBER]" error when using HTTP proxies
@@ -918,7 +927,7 @@ STRICTLY ENFORCE PROPER LINE BREAKS AND STRUCTURE IN EVERY RESPONSE."""
         )
 
         self.client = OpenAI(
-            api_key=self.api_key,
+            api_key=api_key,
             base_url=self.api_base,
             http_client=http_client
         )
@@ -2137,11 +2146,8 @@ STRICTLY ENFORCE PROPER LINE BREAKS AND STRUCTURE IN EVERY RESPONSE."""
         print(f"[AI] Updating AI configuration for existing instance")
 
         # 更新API配置
-        if 'api_key' in config_dict and config_dict['api_key']:
-            self.api_key = config_dict['api_key']
-            # 保存到会话配置（.confignore）
-            if self.conversation_config:
-                self.conversation_config.set_api_key(self.api_key)
+        # api_key 不再从这里更新，而是始终从 .confignore 文件读取
+        # 如果 settings 中包含 api_key，它已经被保存到 .confignore 了
 
         if 'api_base' in config_dict and config_dict['api_base']:
             self.api_base = config_dict['api_base']

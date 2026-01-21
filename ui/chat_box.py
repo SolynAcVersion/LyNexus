@@ -423,10 +423,10 @@ class ConversationContextManager:
         # Load from config manager
         config_data = self.config_manager.load_conversation_config(conversation_name)
         
-        # Get API key from environment or config
-        api_key = (self.config_manager.load_api_key() or 
-                  os.environ.get("DEEPSEEK_API_KEY") or 
-                  os.environ.get("OPENAI_API_KEY") or 
+        # Get API key from conversation-specific .confignore or environment
+        api_key = (self.config_manager.load_api_key(conversation_name) or
+                  os.environ.get("DEEPSEEK_API_KEY") or
+                  os.environ.get("OPENAI_API_KEY") or
                   "")
         
         if config_data:
@@ -1580,7 +1580,6 @@ class ModernChatBox(QWidget):
         
         # Action buttons
         actions = [
-            (i18n.tr("import_config_file"), self._import_config_file, "#3A3A3A"),
             (i18n.tr("settings"), self._open_settings, "#4A4A4A"),
             (i18n.tr("initialize"), self._show_init_dialog, "#2A7CDD"),
             (i18n.tr("tools"), self._show_tools_list, "#3A3A3A"),
@@ -2979,7 +2978,8 @@ class ModernChatBox(QWidget):
     
     def _initialize_ai(self):
         """Initialize AI"""
-        api_key = self.config_manager.load_api_key()
+        # Try to load API key for current conversation
+        api_key = self.config_manager.load_api_key(self.current_conversation) if self.current_conversation else None
 
         if not api_key and not (os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY")):
             # Show init dialog
@@ -3089,45 +3089,6 @@ class ModernChatBox(QWidget):
         self.current_state = ProcessingState.IDLE
         self._update_status_bar()
         QMessageBox.information(self, "Success", f"Settings updated for {conversation_name}")
-    
-    def _import_config_file(self):
-        """Import configuration file"""
-        file_dialog = QFileDialog(self)
-        file_dialog.setWindowTitle("Import Configuration File")
-        file_dialog.setNameFilter("Config Files (*.json);;All Files (*)")
-        file_dialog.setFileMode(QFileDialog.ExistingFile)
-        
-        if file_dialog.exec():
-            selected_files = file_dialog.selectedFiles()
-            if selected_files:
-                config_path = selected_files[0]
-                try:
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        config = json.load(f)
-                    
-                    if not isinstance(config, dict):
-                        raise ValueError("Invalid configuration format")
-                    
-                    ai_instance = self.context_manager.get_ai_for_conversation(self.current_conversation)
-                    if ai_instance:
-                        ai_instance.update_config(config)
-                        self.config_manager.save_conversation_config(self.current_conversation, config)
-                        
-                        if 'mcp_paths' in config:
-                            ai_instance.load_mcp_tools()
-                        
-                        QMessageBox.information(self, "Success",
-                            f"Configuration imported for '{self.current_conversation}'")
-                        
-                        self._update_status_bar()
-                    else:
-                        QMessageBox.warning(self, "Error",
-                            "No AI instance available. Please initialize AI first.")
-                        
-                except json.JSONDecodeError:
-                    QMessageBox.warning(self, "Error", "Invalid JSON file")
-                except Exception as e:
-                    QMessageBox.warning(self, "Error", f"Failed to import: {str(e)}")
     
     def _clear_current_chat(self):
         """Clear current chat"""
@@ -3382,11 +3343,12 @@ class ModernChatBox(QWidget):
     def _handle_init_done(self, api_key: str, mcp_files: list, config_file: str):
         """Handle initialization completion"""
         if api_key:
-            self.config_manager.save_api_key(api_key)
-        
+            # Save API key to current conversation's .confignore
+            self.config_manager.save_api_key(api_key, self.current_conversation)
+
         # Reload AI
         self.context_manager.get_ai_for_conversation(self.current_conversation)
-        
+
         self.send_button.setEnabled(True)
         self._update_status_bar()
     

@@ -85,7 +85,6 @@ class I18n:
                 "save_settings": "保存设置",
                 "save_as_config": "导出配置",
                 "import_config": "导入配置",
-                "import_config_file": "导入设置",
                 "cancel": "取消",
                 "initialize": "初始化",
                 "load_config": "加载配置",

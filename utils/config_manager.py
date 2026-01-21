@@ -152,14 +152,58 @@ class ConfigManager:
         # Return absolute path if relative conversion fails or goes too far up
         return path
     
-    def load_api_key(self):
-        """Load API key from .confignore file or environment variables."""
-        # Try .confignore file first
+    def load_api_key(self, chat_name=None):
+        """Load API key from .confignore file or environment variables.
+
+        Args:
+            chat_name: If provided, loads from data/{chat_name}/.confignore
+                     Otherwise, loads from root .confignore
+        """
+        # Try chat-specific .confignore first
+        if chat_name:
+            chat_dir = self.chat_data_manager.get_chat_dir(chat_name)
+            chat_ignore_path = chat_dir / ".confignore"
+            if chat_ignore_path.exists():
+                try:
+                    with open(chat_ignore_path, 'r', encoding='utf-8') as f:
+                        content = f.read().strip()
+
+                        # Try JSON format first
+                        try:
+                            import json
+                            data = json.loads(content)
+                            if isinstance(data, dict) and 'api_key' in data:
+                                return data['api_key']
+                        except json.JSONDecodeError:
+                            pass
+
+                        # Try key=value format
+                        lines = content.split('\n')
+                        for line in lines:
+                            if '=' in line:
+                                key, value = line.split('=', 1)
+                                if key.strip() == 'api_key':
+                                    return value.strip()
+                except:
+                    pass
+
+        # Try root .confignore file
         ignore_path = self.ignore_file
         if os.path.exists(ignore_path):
             try:
                 with open(ignore_path, 'r', encoding='utf-8') as f:
                     content = f.read().strip()
+
+                    # Try JSON format first
+                    try:
+                        import json
+                        data = json.loads(content)
+                        if isinstance(data, dict) and 'api_key' in data:
+                            return data['api_key']
+                    except json.JSONDecodeError:
+                        pass
+
+                    # Try key=value format
                     lines = content.split('\n')
                     for line in lines:
                         if '=' in line:
@@ -168,21 +212,36 @@ class ConfigManager:
                                 return value.strip()
             except:
                 pass
-        
+
         # Check environment variables
         env_keys = ['DEEPSEEK_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY']
         for key in env_keys:
             value = os.environ.get(key)
             if value:
                 return value
-        
+
         return None
     
-    def save_api_key(self, api_key):
-        """Save API key to .confignore file."""
+    def save_api_key(self, api_key, chat_name=None):
+        """Save API key to .confignore file.
+
+        Args:
+            api_key: The API key to save
+            chat_name: If provided, saves to data/{chat_name}/.confignore
+                     Otherwise, saves to root .confignore
+        """
         try:
-            with open(self.ignore_file, 'w', encoding='utf-8') as f:
-                f.write(f"api_key={api_key}")
+            if chat_name:
+                # Save to chat-specific .confignore
+                chat_dir = self.chat_data_manager.get_chat_dir(chat_name)
+                chat_dir.mkdir(exist_ok=True, parents=True)
+                chat_ignore_path = chat_dir / ".confignore"
+                with open(chat_ignore_path, 'w', encoding='utf-8') as f:
+                    f.write(f"api_key={api_key}")
+            else:
+                # Save to root .confignore
+                with open(self.ignore_file, 'w', encoding='utf-8') as f:
+                    f.write(f"api_key={api_key}")
             return True
         except:
             return False
