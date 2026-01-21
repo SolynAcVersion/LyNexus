@@ -73,7 +73,7 @@ class SettingsDialog(QWidget):
         
         # API provider selection
         self.api_provider_combo = QComboBox()
-        self.api_provider_combo.addItems(["DeepSeek", "OpenAI", "Anthropic", "Local", "Custom"])
+        self.api_provider_combo.addItems(["DeepSeek", "OpenAI", "Anthropic", "GLM", "Local", "Custom"])
         self.api_provider_combo.currentTextChanged.connect(self.on_api_provider_changed)
         
         # API key field with show/hide toggle
@@ -313,8 +313,9 @@ class SettingsDialog(QWidget):
         """Update default values when API provider changes."""
         defaults = {
             "DeepSeek": ("https://api.deepseek.com", "deepseek-chat"),
-            "OpenAI": ("https://api.openai.com/v1", "gpt-4-turbo"),
-            "Anthropic": ("https://api.anthropic.com", "claude-3-opus-20240229"),
+            "OpenAI": ("https://api.openai.com/v1", "gpt-4o"),
+            "Anthropic": ("https://api.anthropic.com", "claude-3-5-sonnet-20241022"),
+            "GLM": ("https://open.bigmodel.cn/api/paas/v4", "glm-4-plus"),
             "Local": ("http://localhost:11434", "llama2"),
             "Custom": ("", "custom")
         }
@@ -350,9 +351,23 @@ class SettingsDialog(QWidget):
             # Store MCP paths from AI config (from settings.json)
             self.mcp_paths = config.get('mcp_paths', [])
 
-            # API settings
-            self.api_base_edit.setText(config.get('api_base', 'https://api.deepseek.com'))
-            self.model_edit.setText(config.get('model', 'deepseek-chat'))
+            # API settings - determine provider from api_base
+            api_base = config.get('api_base', 'https://api.deepseek.com')
+            model = config.get('model', 'deepseek-chat')
+
+            # Set provider based on api_base
+            provider_map = {
+                "https://api.deepseek.com": "DeepSeek",
+                "https://api.openai.com/v1": "OpenAI",
+                "https://api.anthropic.com": "Anthropic",
+                "https://open.bigmodel.cn/api/paas/v4": "GLM",
+                "http://localhost:11434": "Local"
+            }
+            provider = provider_map.get(api_base, "Custom")
+            self.api_provider_combo.setCurrentText(provider)
+
+            self.api_base_edit.setText(api_base)
+            self.model_edit.setText(model)
 
             # Load API key from .confignore (always read fresh from file)
             api_key = self.config_manager.load_api_key(self.conversation_name)
@@ -390,11 +405,23 @@ class SettingsDialog(QWidget):
     def load_from_config(self, config):
         """Load settings from configuration dictionary."""
         try:
-            # API settings
-            if 'api_base' in config:
-                self.api_base_edit.setText(config['api_base'])
-            if 'model' in config:
-                self.model_edit.setText(config['model'])
+            # API settings - determine provider from api_base
+            api_base = config.get('api_base', 'https://api.deepseek.com')
+            model = config.get('model', 'deepseek-chat')
+
+            # Set provider based on api_base
+            provider_map = {
+                "https://api.deepseek.com": "DeepSeek",
+                "https://api.openai.com/v1": "OpenAI",
+                "https://api.anthropic.com": "Anthropic",
+                "https://open.bigmodel.cn/api/paas/v4": "GLM",
+                "http://localhost:11434": "Local"
+            }
+            provider = provider_map.get(api_base, "Custom")
+            self.api_provider_combo.setCurrentText(provider)
+
+            self.api_base_edit.setText(api_base)
+            self.model_edit.setText(model)
             
             # Load API key from .confignore (always read fresh from file)
             api_key = self.config_manager.load_api_key(self.conversation_name)
