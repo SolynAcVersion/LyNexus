@@ -1,0 +1,23 @@
+# LyNexus API Server Dependencies
+# FastAPI backend for WebUI
+
+# Web Framework
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+sse-starlette>=1.8.2
+
+# Data Validation
+pydantic>=2.0.0
+
+# HTTP Client (for API calls)
+httpx>=0.25.0
+requests>=2.31.0
+
+# File Handling
+python-multipart>=0.0.6
+
+# Utilities
+python-dotenv>=1.0.0
+
+# Existing dependencies
+aiofiles>=23.0.0

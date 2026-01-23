@@ -1,0 +1,64 @@
+{
+  "name": "lynexus-webui",
+  "version": "1.0.0",
+  "description": "LyNexus AI Assistant - Modern Web UI",
+  "main": "dist-electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build": "npm run build && electron-builder",
+    "type-check": "tsc --noEmit",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "zustand": "^4.4.7",
+    "axios": "^1.6.2",
+    "date-fns": "^3.0.6",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0",
+    "lucide-react": "^0.294.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@types/node": "^20.10.5",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.2.0",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.3.6"
+  },
+  "build": {
+    "appId": "com.lynexus.ai",
+    "productName": "LyNexus",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "assets/logo.ico"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "assets/logo.icns"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "icon": "assets/logo.png"
+    }
+  }
+}

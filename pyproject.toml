@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "fastapi>=0.128.0",
     "nuitka>=2.8.9",
     "openai>=2.14.0",
     "pyinstaller>=6.18.0",

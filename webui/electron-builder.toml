@@ -1,0 +1,60 @@
+# Electron Builder Configuration
+# https://www.electron.build/configuration/configuration
+
+appId = "com.lynexus.ai"
+productName = "LyNexus"
+copyright = "Copyright © 2024 LyNexus"
+
+[files]
+includes = [
+  "dist/**/*",
+  "dist-electron/**/*",
+  "package.json"
+]
+
+[directories]
+output = "release"
+buildResources = "assets"
+
+[win]
+target = ["nsis"]
+icon = "assets/logo.ico"
+artifactName = "${productName}-${version}-${arch}.${ext}"
+
+[win.portable]
+artifactName = "${productName}-${version}-${arch}.exe"
+
+[mac]
+target = ["dmg"]
+icon = "assets/logo.icns"
+category = "public.app-category.productivity"
+hardenedRuntime = true
+gatekeeperAssess = false
+entitlements = "assets/entitlements.mac.plist"
+entitlementsInherit = "assets/entitlements.mac.plist"
+
+[linux]
+target = ["AppImage"]
+icon = "assets/logo.png"
+category = "Utility"
+synopsis = "AI Assistant with MCP Tools"
+description = "Modern AI chat interface with MCP tools support"
+
+[nsis]
+createDesktopShortcut = true
+createStartMenuShortcut = true
+allowToChangeInstallationDirectory = true
+installerIcon = "assets/logo.ico"
+uninstallerIcon = "assets/logo.ico"
+oneClick = false
+perMachine = false
+
+[dmg]
+window = {
+  width = 540
+  height = 380
+}
+contents = [
+  { "x": 170, "y": 180, "type": "link", "path": "/Applications" },
+  { "x": 370, "y": 180, "type": "file", "path": "LyNexus.app" }
+]

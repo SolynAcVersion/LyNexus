@@ -250,27 +250,52 @@ def _get_config_value(path: str, fallback=None):
 
 @dataclass
 class ConversationConfig:
-    """Configuration for a conversation session"""
+    """Configuration for a conversation session
+
+    Default values are loaded from default_config.json and default_prompts.json
+    """
     api_key: str = ""
-    api_base: str = "https://api.deepseek.com"
-    model: str = "deepseek-chat"
-    temperature: float = 1.0
+    api_base: str = None  # Will be loaded from default_config.json in __post_init__
+    model: str = None  # Will be loaded from default_config.json in __post_init__
+    temperature: float = None  # Will be loaded from default_config.json in __post_init__
     max_tokens: Optional[int] = None
-    top_p: float = 1.0
-    stream: bool = True
-    command_start: str = "YLDEXECUTE:"
-    command_separator: str = "￥|"
-    max_iterations: int = 15
+    top_p: float = None  # Will be loaded from default_config.json in __post_init__
+    stream: bool = None  # Will be loaded from default_config.json in __post_init__
+    command_start: str = None  # Will be loaded from default_config.json in __post_init__
+    command_separator: str = None  # Will be loaded from default_config.json in __post_init__
+    max_iterations: int = None  # Will be loaded from default_config.json in __post_init__
     mcp_paths: List[str] = None
     enabled_mcp_tools: List[str] = None  # List of enabled MCP tool names
     system_prompt: str = ""
 
     def __post_init__(self):
-        """Initialize default values for mutable fields and prompts from config"""
+        """Initialize default values for mutable fields and prompts from config files"""
         if self.mcp_paths is None:
             self.mcp_paths = []
         if self.enabled_mcp_tools is None:
             self.enabled_mcp_tools = []
+
+        # Load default values from default_config.json if not explicitly provided
+        if self.api_base is None:
+            self.api_base = _get_config_value('api.api_base', 'https://api.deepseek.com')
+        if self.model is None:
+            self.model = _get_config_value('api.model', 'deepseek-chat')
+        if self.temperature is None:
+            self.temperature = _get_config_value('model_parameters.temperature', 1.0)
+        if self.top_p is None:
+            self.top_p = _get_config_value('model_parameters.top_p', 1.0)
+        if self.stream is None:
+            self.stream = _get_config_value('model_parameters.stream', True)
+        if self.command_start is None:
+            self.command_start = _get_config_value('command_format.command_start', 'YLDEXECUTE:')
+        if self.command_separator is None:
+            self.command_separator = _get_config_value('command_format.command_separator', '￥|')
+        if self.max_iterations is None:
+            self.max_iterations = _get_config_value('execution.max_iterations', 15)
+
+        # Load system prompt from default_prompts.json if not provided
+        if not self.system_prompt:
+            self.system_prompt = _DEFAULT_PROMPTS.get('system_prompts', {}).get('default', "You are a helpful AI assistant.")
 
         # Load prompts from default_prompts.json if not explicitly provided
         # Check if prompts have their default values (empty strings would mean "use config file defaults")
@@ -2949,20 +2974,33 @@ class ModernChatBox(QWidget):
         name, ok = QInputDialog.getText(self, "New Chat", "Enter chat name:")
 
         if ok and name:
+            # Create data folder for new chat
+            try:
+                chat_dir = self.chat_data_manager.create_chat_folder(name)
+                print(f"[ModernChatBox] Created chat data folder: {chat_dir}")
+            except Exception as e:
+                print(f"[ModernChatBox] Failed to create chat folder: {e}")
+                QMessageBox.warning(self, "Error", f"Failed to create chat folder: {e}")
+                return
+
+            # Initialize chat records
+            if name not in self.chat_records:
+                self.chat_records[name] = []
+            self.config_manager.save_chat_history(self.chat_records)
+
+            # Add to chat list
+            if name not in self.chat_list_names:
+                self.chat_list_names.append(name)
+                self.config_manager.save_chat_list(self.chat_list_names)
+
             # Add to UI
             item = QListWidgetItem(name)
             item.setData(Qt.UserRole, name)
             self.chat_list.addItem(item)
 
-            if name not in self.chat_list_names:
-                self.chat_list_names.append(name)
-                self.config_manager.save_chat_list(self.chat_list_names)
-
             # Select new chat
-            items = self.chat_list.findItems(name, Qt.MatchExactly)
-            if items:
-                self.chat_list.setCurrentItem(items[0])
-                self.switch_chat_target(items[0])
+            self.chat_list.setCurrentItem(item)
+            self.switch_chat_target(item)
     
     # ============================================================================
     # AI INITIALIZATION

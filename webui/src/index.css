@@ -1,0 +1,305 @@
+/**
+ * Global Styles and Tailwind CSS
+ * Modern dark theme inspired by Telegram
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===================================================================
+   Base Styles
+   =================================================================== */
+
+@layer base {
+  * {
+    @apply border-dark-border;
+  }
+
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    @apply bg-dark-bg text-dark-text;
+    font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom scrollbar for webkit browsers */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-dark-border rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-dark-textTertiary;
+  }
+
+  /* Selection color */
+  ::selection {
+    @apply bg-primary/30;
+  }
+}
+
+/* ===================================================================
+   Component Styles
+   =================================================================== */
+
+@layer components {
+  /* Message bubble animations */
+  .message-enter {
+    @apply animate-fade-in;
+  }
+
+  /* Typing indicator delays */
+  .delay-75 {
+    animation-delay: 75ms;
+  }
+
+  .delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .delay-150 {
+    animation-delay: 150ms;
+  }
+
+  .delay-200 {
+    animation-delay: 200ms;
+  }
+
+  /* Scrollbar thin utility */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-dark-border/50 rounded-full;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    @apply bg-dark-textTertiary/50;
+  }
+}
+
+/* ===================================================================
+   Markdown Styles
+   =================================================================== */
+
+@layer components {
+  .prose {
+    @apply text-dark-text;
+  }
+
+  .prose p {
+    @apply mb-2 last:mb-0;
+  }
+
+  .prose a {
+    @apply text-primary hover:text-primary-light underline transition-colors;
+  }
+
+  .prose code {
+    @apply px-1.5 py-0.5 rounded bg-black/20 text-sm font-mono;
+  }
+
+  .prose pre {
+    @apply p-3 rounded-lg bg-black/30 overflow-x-auto my-2;
+  }
+
+  .prose pre code {
+    @apply p-0 bg-transparent;
+  }
+
+  .prose ul,
+  .prose ol {
+    @apply my-2 ml-4;
+  }
+
+  .prose li {
+    @apply mb-1;
+  }
+
+  .prose ul {
+    @apply list-disc;
+  }
+
+  .prose ol {
+    @apply list-decimal;
+  }
+
+  .prose blockquote {
+    @apply border-l-4 border-black/20 pl-4 italic my-2;
+  }
+
+  .prose h1,
+  .prose h2,
+  .prose h3 {
+    @apply font-bold mt-4 mb-2;
+  }
+
+  .prose h1 {
+    @apply text-xl;
+  }
+
+  .prose h2 {
+    @apply text-lg;
+  }
+
+  .prose h3 {
+    @apply text-base;
+  }
+
+  .prose table {
+    @apply min-w-full border-collapse my-2;
+  }
+
+  .prose thead {
+    @apply bg-black/20;
+  }
+
+  .prose th {
+    @apply px-3 py-2 text-left font-semibold;
+  }
+
+  .prose td {
+    @apply px-3 py-2 border-t border-dark-border;
+  }
+
+  .prose img {
+    @apply rounded-lg max-w-full h-auto;
+  }
+
+  .prose hr {
+    @apply my-4 border-dark-border;
+  }
+}
+
+/* ===================================================================
+   Utility Classes
+   =================================================================== */
+
+@layer utilities {
+  /* Glass morphism effect */
+  .glass {
+    @apply bg-white/5 backdrop-blur-md border border-white/10;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent;
+  }
+
+  /* Focus visible utility */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-dark-bg;
+  }
+}
+
+/* ===================================================================
+   Animations
+   =================================================================== */
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite linear;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    transparent 100%
+  );
+  background-size: 1000px 100%;
+}
+
+/* Message bubble slide animation */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in-up {
+  animation: slideInUp 0.3s ease-out;
+}
+
+/* Pulse animation for typing indicator */
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+/* ===================================================================
+   Print Styles
+   =================================================================== */
+
+@media print {
+  body {
+    @apply bg-white text-black;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* ===================================================================
+   Accessibility
+   =================================================================== */
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus visible styles for keyboard navigation */
+:focus-visible {
+  @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-dark-bg;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .message-bubble {
+    @apply border-2;
+  }
+}
