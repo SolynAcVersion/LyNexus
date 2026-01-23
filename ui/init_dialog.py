@@ -74,12 +74,12 @@ class InitDialog(QWidget):
         self.model_combo = QComboBox()
         self.model_combo.addItems([
             "deepseek-chat",
+            "deepseek-reasoner",
             "gpt-4-turbo",
             "gpt-4o",
-            "claude-3-opus-20240229",
-            "claude-3-5-sonnet-20241022",
-            "claude-3-5-haiku-20241022",
-            "glm-4-plus",
+            "claude-opus-4.5",
+            "claude-sonnet-4.5",
+            "claude-haiku-4.5",
             "glm-4.7",
             "llama2",
             "custom"
@@ -129,8 +129,8 @@ class InitDialog(QWidget):
         defaults = {
             "DeepSeek": ("https://api.deepseek.com", "deepseek-chat"),
             "OpenAI": ("https://api.openai.com/v1", "gpt-4o"),
-            "Anthropic": ("https://api.anthropic.com", "claude-3-5-sonnet-20241022"),
-            "GLM": ("https://open.bigmodel.cn/api/paas/v4", "glm-4-plus"),
+            "Anthropic": ("https://api.anthropic.com", "claude-sonnet-4.5"),
+            "GLM": ("https://open.bigmodel.cn/api/paas/v4", "glm-4.7"),
             "Local": ("http://localhost:11434", "llama2"),
             "Custom": ("", "custom")
         }

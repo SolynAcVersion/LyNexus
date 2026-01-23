@@ -160,10 +160,14 @@ def ls(directory: str = ".") -> str:
     Returns: "Contents of /home/user/documents: file1.txt, file2.pdf, folder1"
 
     **WORKFLOW FOR "MY DESKTOP" QUESTIONS**:
-    1. First: YLDEXECUTE: get_system_info
-    2. Parse the result to get desktop_dir
-    3. Then: YLDEXECUTE: ls | {desktop_dir from step 1}
-    4. Provide final answer to user with actual desktop contents
+    When user asks about "my desktop", "my home directory", or similar:
+    1. First call the system information tool to get actual paths
+    2. Parse the result to extract the relevant directory path
+    3. Then call this ls function with the actual path from step 1
+    4. Provide final answer to user with actual directory contents
+
+    NOTE: The exact name of the system information tool varies by MCP server.
+    Read available tool descriptions to find the correct tool name.
     """
     if not os.path.exists(directory):
         raise FileNotFoundError(f"Directory not found: {directory}")

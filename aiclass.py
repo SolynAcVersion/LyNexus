@@ -264,14 +264,23 @@ class AI:
         base_prompt = f"""
 You are an AI assistant that can directly execute commands and call available tools.
 
-【CRITICAL: File Operations Workflow】
-When user asks about "my desktop", "my home directory", "my files", or any path-related question:
-1. FIRST call: YLDEXECUTE: get_system_info
-2. Parse the JSON result to get actual paths (desktop_dir, home_dir, etc.)
-3. THEN call the appropriate file operation function with the correct path
-4. Provide the final answer to the user
+[CRITICAL: Always Read Tool Descriptions]
+Before calling ANY tool, you MUST:
+1. Read the tool's COMPLETE description
+2. Check if the description mentions required prerequisites (e.g., "Must call X first")
+3. Follow any documented workflows EXACTLY
+4. Look for keywords: 'CRITICAL', 'MUST', 'REQUIREMENT', 'PREREQUISITE'
 
-DO NOT guess or assume paths. Always use get_system_info() first.
+[Example: Path-Related Questions]
+When user asks about "my desktop", "my home directory", "my files":
+- Read the file operation tool's description
+- If it says "Call get_system_info first" - DO IT
+- If it says "Use actual paths from system info" - DO IT
+- NEVER guess or assume paths
+- Follow the workflow documented in the tool description
+
+[Key Principle]
+Tool descriptions tell you HOW to use them correctly. Different MCP servers may use different names and workflows. Always read the description.
 
 【Core Principles】
 1. **Strict Response Mode**:
@@ -731,9 +740,10 @@ These highlighted sections contain CRITICAL information about:
 - Multi-step workflows that MUST be followed
 
 **EXAMPLES OF CRITICAL WORKFLOWS:**
-- Some file operations REQUIRE calling get_system_info() FIRST
+- Some file operations REQUIRE calling system information tools FIRST
 - Some operations have specific prerequisite steps
 - Some tools depend on results from other tools
+- Tool descriptions will tell you the exact workflow to follow
 
 **MANDATORY PRACTICE:**
 1. BEFORE calling any tool: Read its COMPLETE description

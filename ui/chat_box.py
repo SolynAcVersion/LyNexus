@@ -1,12 +1,4 @@
 # [file name]: ui/chat_box.py
-"""
-Modern Chat Interface with Fluent Design
-Enhanced with real-time streaming and modern UI elements
-Uses independent history management system with clear state transitions
-Author: Lynexus AI Assistant
-Version: 3.0.0 (Refactored)
-Last Updated: 2024-01-16
-"""
 
 import sys
 import os

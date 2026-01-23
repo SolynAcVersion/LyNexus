@@ -8,17 +8,19 @@ with open('prefab_file_operator.json', 'r', encoding='utf-8') as f:
 if '【CRITICAL: File Operations Workflow】' not in data['system_prompt']:
     # 在 system_prompt 末尾添加文件操作工作流程
     workflow = '\n\n【CRITICAL: File Operations Workflow】\n'
-    workflow += '**MUST READ**: Before ANY file operation (ls, cat, mkdir, etc.), you MUST:\n\n'
-    workflow += '1. FIRST call: YLDEXECUTE: get_system_info\n'
-    workflow += '2. READ the result to get actual paths (desktop_dir, home_dir, etc.)\n'
-    workflow += '3. THEN call the file operation with correct paths\n\n'
+    workflow += '**MUST READ**: Before ANY file operation, you MUST:\n\n'
+    workflow += '1. READ the complete tool description\n'
+    workflow += '2. CHECK if the description mentions required prerequisites\n'
+    workflow += '3. FOLLOW any documented workflows EXACTLY\n\n'
     workflow += 'Examples:\n'
     workflow += '- User: "List my desktop"\n'
-    workflow += '  WRONG: YLDEXECUTE: ls ￥| ~/Desktop\n'
-    workflow += '  CORRECT:\n'
-    workflow += '    Step 1: YLDEXECUTE: get_system_info\n'
-    workflow += '    Step 2: YLDEXECUTE: ls ￥| C:\\Users\\YOUR_USER\\Desktop (using actual path from step 1)\n\n'
-    workflow += 'NEVER use ~, /home/user, /Users/username in paths!\n'
+    workflow += '  Steps:\n'
+    workflow += '    1. Read the file operation tool description\n'
+    workflow += '    2. If it says "Call system info tool first", DO IT\n'
+    workflow += '    3. Use the actual paths from the system info\n'
+    workflow += '    4. Call the file operation with correct paths\n\n'
+    workflow += 'NEVER guess or assume paths like ~, /home/user, /Users/username!\n'
+    workflow += 'ALWAYS read tool descriptions to understand the correct workflow.\n'
 
     data['system_prompt'] += workflow
 
