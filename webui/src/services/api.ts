@@ -456,6 +456,37 @@ export const mcpAPI = {
   },
 
   /**
+   * Upload MCP tool files to conversation's tools directory
+   *
+   * POST /conversations/:id/mcp-tools/upload
+   */
+  async uploadTools(
+    conversationId: string,
+    files: File[]
+  ): Promise<APIResponse<{ uploadedCount: number; paths: string[] }>> {
+    try {
+      const formData = new FormData();
+      files.forEach((file) => {
+        formData.append('files', file);
+      });
+
+      const response = await apiClient.post<{ uploadedCount: number; paths: string[] }>(
+        `/conversations/${conversationId}/mcp-tools/upload`,
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        }
+      );
+      return { success: true, data: response.data };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to upload MCP tools',
+      };
+    }
+  },
+
+  /**
    * Toggle MCP tool enabled state
    *
    * PUT /mcp/tools/:toolName/toggle

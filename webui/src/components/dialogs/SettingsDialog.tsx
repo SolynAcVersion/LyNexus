@@ -190,29 +190,49 @@ export function SettingsDialog({ isOpen, onClose, onSave }: SettingsDialogProps)
     if (!files || !currentConversation) return;
 
     const fileArray = Array.from(files);
-    const newPaths = [...settings.mcpPaths];
 
-    for (const file of fileArray) {
-      // Check if file is a Python file
-      if (!file.name.endsWith('.py')) {
-        alert(`Invalid file type: ${file.name}. Only .py files are supported.`);
-        continue;
-      }
+    // Filter valid file types
+    const validFiles = fileArray.filter(file =>
+      file.name.endsWith('.py') || file.name.endsWith('.json') || file.name.endsWith('.yaml') || file.name.endsWith('.yml')
+    );
 
-      // For now, just add the file path to the list
-      // In a real implementation, you'd need to upload the file to the server
-      newPaths.push(`./tools/${file.name}`);
+    if (validFiles.length === 0) {
+      alert('No valid files selected. Please select .py, .json, .yaml, or .yml files.');
+      return;
     }
 
-    updateSetting('mcpPaths', newPaths);
+    if (validFiles.length < fileArray.length) {
+      alert(`Some files were skipped. Only .py, .json, .yaml, and .yml files are supported.`);
+    }
+
+    try {
+      // Upload files to server
+      const response = await api.mcp.uploadTools(currentConversation.id, validFiles);
+
+      if (response.success && response.data) {
+        // Add the new paths to settings
+        const newPaths = [...settings.mcpPaths];
+        for (const path of response.data.paths) {
+          if (path && !newPaths.includes(path)) {
+            newPaths.push(path);
+          }
+        }
+
+        updateSetting('mcpPaths', newPaths);
+
+        // Show success message
+        alert(`Successfully uploaded ${response.data.uploadedCount} MCP tool(s) to data/${currentConversation.id}/tools/`);
+      } else {
+        alert(`Failed to upload MCP tools: ${response.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      alert(`Failed to upload MCP tools: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
 
     // Reset the input
     if (mcpFileInputRef.current) {
       mcpFileInputRef.current.value = '';
     }
-
-    // Alert user that files were added
-    alert(`Added ${fileArray.length} MCP tool(s). Note: Files must be manually placed in the tools/ directory.`);
   }
 
   return (

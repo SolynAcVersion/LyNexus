@@ -804,7 +804,7 @@ async def get_mcp_tools(conversation: Optional[str] = None):
 
 @app.post("/api/conversations/{conversation_id}/mcp-tools")
 async def add_mcp_tool(conversation_id: str, filePath: str = Form(...)):
-    """Add MCP tool to conversation"""
+    """Add MCP tool to conversation (deprecated - use upload_mcp_tools instead)"""
     try:
         config = load_conversation_config(conversation_id)
         mcp_paths = config.get("mcp_paths", [])
@@ -817,6 +817,77 @@ async def add_mcp_tool(conversation_id: str, filePath: str = Form(...)):
         return {"success": True}
     except Exception as e:
         logger.error(f"Error adding MCP tool: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/conversations/{conversation_id}/mcp-tools/upload")
+async def upload_mcp_tools(conversation_id: str, files: List[UploadFile] = File(...)):
+    """
+    Upload MCP tool files to the conversation's tools directory (data/{conversation_id}/tools/)
+    Automatically saves files and returns the relative paths
+    """
+    try:
+        # Get or create conversation directory
+        conv_dir = get_conversation_dir(conversation_id)
+        if not conv_dir.exists():
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        # Get tools directory
+        tools_dir = chat_data_manager.get_tools_dir(conversation_id)
+        tools_dir.mkdir(parents=True, exist_ok=True)
+
+        uploaded_paths = []
+
+        for file in files:
+            # Check file extension
+            if not file.filename.endswith(('.py', '.json', '.yaml', '.yml')):
+                logger.warning(f"Skipping invalid file type: {file.filename}")
+                continue
+
+            # Save file to tools directory
+            file_path = tools_dir / file.filename
+
+            try:
+                with open(file_path, 'wb') as f:
+                    content = await file.read()
+                    f.write(content)
+
+                # Return relative path with forward slashes
+                relative_path = f"./tools/{file.filename}"
+                uploaded_paths.append(relative_path)
+
+                logger.info(f"Uploaded MCP tool: {file.filename} -> {file_path}")
+
+            except Exception as e:
+                logger.error(f"Failed to save file {file.filename}: {e}")
+                continue
+
+        # Update conversation config with new paths
+        if uploaded_paths:
+            config = load_conversation_config(conversation_id)
+            mcp_paths = config.get("mcp_paths", [])
+
+            for path in uploaded_paths:
+                if path not in mcp_paths:
+                    mcp_paths.append(path)
+
+            config["mcp_paths"] = mcp_paths
+            config["updatedAt"] = datetime.now().isoformat()
+            save_conversation_config(conversation_id, config)
+
+            # Recreate AI instance to reload tools
+            if conversation_id in conversation_ais:
+                del conversation_ais[conversation_id]
+
+        return {
+            "success": True,
+            "uploadedCount": len(uploaded_paths),
+            "paths": uploaded_paths
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading MCP tools: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/mcp/tools/{tool_name}/toggle")
