@@ -21,6 +21,7 @@ import { cn } from '../../utils/classnames';
 import { useAppStore } from '../../stores/useAppStore';
 import { getRelativeTime, stripMarkdown, truncate } from '../../utils';
 import type { Conversation } from '../../types';
+import { NewChatDialog } from '@components/dialogs/NewChatDialog';
 
 // ============================================================================
 // Type Definitions
@@ -183,15 +184,23 @@ export function ConversationList({ className }: ConversationListProps) {
   } = useAppStore();
 
   const [isCreating, setIsCreating] = useState(false);
+  const [showNewChatDialog, setShowNewChatDialog] = useState(false);
 
   /**
-   * Handle new chat creation
+   * Handle new chat button click - show dialog
    */
-  async function handleNewChat() {
+  function handleNewChat() {
+    if (isCreating) return;
+    setShowNewChatDialog(true);
+  }
+
+  /**
+   * Handle creating chat with custom name
+   */
+  async function handleCreateChat(name: string) {
     if (isCreating) return;
 
     setIsCreating(true);
-    const name = `${I18n.tr('chat')} ${conversations.length + 1}`;
     const newConversation = await createConversation(name);
 
     if (newConversation) {
@@ -427,6 +436,13 @@ export function ConversationList({ className }: ConversationListProps) {
           )}
         </div>
       </div>
+
+      {/* New Chat Dialog */}
+      <NewChatDialog
+        isOpen={showNewChatDialog}
+        onClose={() => setShowNewChatDialog(false)}
+        onCreate={handleCreateChat}
+      />
     </div>
   );
 }

@@ -6,6 +6,8 @@
 import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkRehype from 'remark-rehype';
+import rehypeRaw from 'rehype-raw';
 import { formatTime } from '../../utils';
 import { cn } from '../../utils/classnames';
 import type { Message, MessageType } from '../../types';
@@ -107,7 +109,8 @@ function getAlignment(type: MessageType) {
 function MarkdownRenderer({ content }: { content: string }) {
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkRehype]}
+      rehypePlugins={[rehypeRaw]}
       components={{
         p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
         code: ({ node, className, children, ...props }: any) =>

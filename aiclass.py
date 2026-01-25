@@ -768,17 +768,18 @@ FAILURE TO FOLLOW TOOL DESCRIPTION WORKFLOWS WILL RESULT IN ERRORS."""
         return """【CRITICAL: Markdown Formatting Requirements - MANDATORY】
 
 **MANDATORY LINE BREAK RULES:**
-You MUST use actual newline characters (<br>) between different points, items, or sections.
+You MUST use blank lines between different Markdown elements (lists, sections, code blocks).
 - NEVER cram multiple items into one paragraph
-- ALWAYS use <br> before each bullet point
-- ALWAYS use <br> before each numbered list item
-- ALWAYS use <br> between different sections
+- ALWAYS add a blank line BEFORE each list (bullet or numbered)
+- ALWAYS add a blank line BETWEEN different sections
+- ALWAYS add a blank line BEFORE and AFTER code blocks
 
 **Correct Format:**
 ```
-Here are the items:<br>
-- Item 1<br>
-- Item 2<br>
+Here are the items:
+
+- Item 1
+- Item 2
 - Item 3
 ```
 
@@ -789,24 +790,53 @@ Here are the items: - Item 1 - Item 2 - Item 3
 
 **MANDATORY STRUCTURE:**
 1. Start with a brief summary (2-3 sentences max)
-2. Use ## for main sections
-3. Use - or * for bullet points (with <br> before each)
-4. Use numbered lists (1. 2. 3.) for steps (with <br> before each)
-5. Use ```language for code blocks
+
+2. Use ## for main sections (with blank line before)
+
+3. Use - or * for bullet points (with blank line before list)
+
+4. Use numbered lists (1. 2. 3.) for steps (with blank line before list)
+
+5. Use ```language for code blocks (with blank lines before/after)
+
 6. End with a brief conclusion
 
 **LANGUAGE RULE:**
 Respond in the SAME language as the user's message (Chinese→Chinese, English→English).
 
 **Line Break Examples:**
-GOOD: "Found 5 files:<br><br>1. file1.txt<br>2. file2.txt<br>3. file3.txt"
-BAD: "Found 5 files: 1. file1.txt 2. file2.txt 3. file3.txt"
 
-GOOD: "Categories:<br><br>- Programming<br>- Tools<br>- Documents"
-BAD: "Categories: - Programming - Tools - Documents"
+GOOD:
+```
+Found 5 files:
+
+1. file1.txt
+2. file2.txt
+3. file3.txt
+```
+
+BAD:
+```
+Found 5 files: 1. file1.txt 2. file2.txt 3. file3.txt
+```
+
+GOOD:
+```
+Categories:
+
+- Programming
+- Tools
+- Documents
+```
+
+BAD:
+```
+Categories: - Programming - Tools - Documents
+```
 
 **Code Format:**
-Always use triple backticks with language:
+Always use triple backticks with language (blank lines before/after):
+
 ```python
 print('hello')
 ```
@@ -1504,92 +1534,92 @@ STRICTLY ENFORCE PROPER LINE BREAKS AND STRUCTURE IN EVERY RESPONSE."""
                 print(f"[AI] Stream iteration {iteration + 1} complete: {current_response[:100]}...")
                 
                 # 检查是否AI想要执行命令
-                if current_response.startswith(self.command_start):
-                    print(f"[AI] Command detected in response: {current_response}")
+                # 检查响应中是否包含任何命令（可能在多行中）
+                lines = current_response.split('\n')
+                command_lines = [line.strip() for line in lines if line.strip().startswith(self.command_start)]
 
-                    # 注意：命令已经在streaming过程中通过第1481-1487行的callback发送过了
-                    # 这里不需要再发送一次，避免重复显示
+                if command_lines:
+                    print(f"[AI] {len(command_lines)} command(s) detected in response")
 
-                    # 添加AI回复到历史
-                    history.append({"role": "assistant", "content": current_response})
+                    # 为每个命令执行
+                    for cmd_idx, command_line in enumerate(command_lines):
+                        print(f"[AI] Processing command {cmd_idx + 1}/{len(command_lines)}: {command_line}")
 
-                    # 解析命令
-                    tokens = current_response.replace(self.command_start, "").strip().split(self.command_separator)
-                    tokens = [t.strip() for t in tokens]
-                    
-                    if len(tokens) < 1:
-                        res = "Error! Your command format is incorrect"
-                    else:
-                        func_name = tokens[0]
-                        args = tokens[1:] if len(tokens) > 1 else []
-                        
-                        # 执行函数
-                        res = self.exec_func(func_name, *args)
+                        # 添加当前命令到历史
+                        history.append({"role": "assistant", "content": command_line})
 
-                    print(f"[AI] Command execution result: {res}")
+                        # 解析命令
+                        tokens = command_line.replace(self.command_start, "").strip().split(self.command_separator)
+                        tokens = [t.strip() for t in tokens]
 
-                    # 发送命令执行结果到UI（通过callback）
-                    # 注意：只在成功时发送,并且要提取实际结果(去掉"Execution successful:"前缀)
-                    if callback and "Execution successful:" in res:
-                        # 提取实际结果内容
-                        actual_result = res.replace("Execution successful: ", "").strip()
-                        # 限制显示长度为100字
-                        display_result = actual_result[:100] + "..." if len(actual_result) > 100 else actual_result
-                        result_message = f"Execution successful:\n{display_result}"
-                        print(f"[AI] >>>>> SENDING COMMAND RESULT VIA CALLBACK: {result_message[:100]}...")
-                        callback(result_message)
+                        if len(tokens) < 1:
+                            res = "Error! Your command format is incorrect"
+                        else:
+                            func_name = tokens[0]
+                            args = tokens[1:] if len(tokens) > 1 else []
 
-                    # 添加执行结果到历史（使用自定义提示词）
-                    history.append({
-                        "role": "user",
-                        "content": self.command_execution_prompt.format(result=res)
-                    })
+                            # 执行函数
+                            res = self.exec_func(func_name, *args)
 
-                    iteration += 1
+                        print(f"[AI] Command {cmd_idx + 1} execution result: {res[:200] if len(res) > 200 else res}")
 
-                    # 如果执行失败，显示错误信息并让 AI 重新尝试
-                    # 移除 iteration < 2 的限制，允许持续重试
-                    if ("Execution failed" in res or "Error" in res or "error:" in res.lower()):
-                        print("[AI] Command execution failed, showing error to user")
-                        # Remove the failed command and execution prompt from history
-                        if len(history) >= 2:
-                            history.pop()  # Remove execution prompt
-                            history.pop()  # Remove command response
-                            print(f"[AI] Removed failed command, history size now: {len(history)}")
+                        # 发送命令执行结果到UI（通过callback）
+                        if callback and "Execution successful:" in res:
+                            # 提取实际结果内容
+                            actual_result = res.replace("Execution successful: ", "").strip()
+                            # 限制显示长度为100字
+                            display_result = actual_result[:100] + "..." if len(actual_result) > 100 else actual_result
+                            result_message = f"Execution successful:\n{display_result}"
+                            print(f"[AI] >>>>> SENDING COMMAND RESULT VIA CALLBACK: {result_message[:100]}...")
+                            callback(result_message)
 
-                        # 显示错误信息给用户
-                        error_prompt = f"**错误**: {res}\n\n" + self.command_retry_prompt.format(error=res)
+                        # 添加执行结果到历史（使用自定义提示词）
                         history.append({
                             "role": "user",
-                            "content": error_prompt
+                            "content": self.command_execution_prompt.format(result=res)
                         })
+
+                        # 检查是否执行失败
+                        if ("Execution failed" in res or "Error" in res or "error:" in res.lower()):
+                            print(f"[AI] Command {cmd_idx + 1} failed, stopping further command execution")
+                            # 显示错误信息并让 AI 重新尝试
+                            error_prompt = f"**错误**: {res}\n\n" + self.command_retry_prompt.format(error=res)
+                            history.append({
+                                "role": "user",
+                                "content": error_prompt
+                            })
+                            # 停止处理后续命令，立即让 AI 重新尝试
+                            break
+
+                        # 如果执行成功但还有更多命令，继续处理
+                        if cmd_idx < len(command_lines) - 1:
+                            print(f"[AI] Command {cmd_idx + 1} succeeded, processing next command")
+                            continue
+
+                    # 所有命令处理完成（或遇到错误后跳出）
+                    iteration += 1
+
+                    # 检查最后一次命令的执行结果
+                    last_result = history[-1]["content"] if history else ""
+
+                    if ("Execution failed" in last_result or "Error" in last_result or "error:" in last_result.lower()):
+                        # 最后一个命令失败，让 AI 重试
+                        print("[AI] Last command failed, AI will retry")
                         continue
 
-                    # 如果执行成功，让AI决定是否需要继续
-                    if "Execution successful" in res:
-                        # 继续下一个迭代，但AI应该主动停止
-                        print("[AI] Command executed successfully, AI will decide next step")
-                        # 给AI一次机会决定是否继续，但限制总迭代次数
-                        if iteration >= self.max_iterations:  # 使用配置的迭代次数
+                    # 如果所有命令都成功，让 AI 决定下一步
+                    if "Execution successful" in last_result or "Tool execution completed" in last_result:
+                        print("[AI] All commands executed successfully, AI will decide next step")
+                        if iteration >= self.max_iterations:
                             print(f"[AI] Reached safety limit ({self.max_iterations}), requesting final summary")
                             history.append({
                                 "role": "user",
                                 "content": self.final_summary_prompt
                             })
-                            summary_requested = True  # Mark that we've requested summary
+                            summary_requested = True
                             continue
                         else:
                             continue
-                    else:
-                        # 不是明确成功，直接请求总结（不要再继续了）
-                        print("[AI] Command execution did not succeed, requesting summary")
-                        history.append({
-                            "role": "user",
-                            "content": self.final_summary_prompt
-                        })
-                        summary_requested = True
-                        iteration += 1
-                        continue
                         
                 else:
                     # 没有命令执行，完成处理

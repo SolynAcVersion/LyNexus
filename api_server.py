@@ -521,7 +521,8 @@ async def message_generator(ai: AI, user_message: str, conversation_id: str):
         # This is CRITICAL: history_manager.load_history() will:
         # 1. Load history from data/{chat_name}/{chat_name}_ai.json
         # 2. Inject system prompt with tools description + markdown rules + history guidance
-        system_prompt = ai.system_prompt if ai else None
+        # Get effective system prompt (includes tools description + markdown rules)
+        system_prompt = ai.get_effective_system_prompt() if ai else None
         conversation_history = history_manager.load_history(conversation_id, system_prompt or "")
 
         # Add user message to history WITH timestamp
@@ -540,11 +541,16 @@ async def message_generator(ai: AI, user_message: str, conversation_id: str):
 
         # Process with streaming - CRITICAL: pass conversation_history
         # This ensures AI has proper context with system prompt
+        # aiclass.py will handle command detection and execution internally
         for chunk in ai.process_user_input_stream(user_message, conversation_history):
             if chunk:
                 full_response += chunk
                 # Send chunk - EventSourceResponse requires JSON-encoded string for 'data'
                 yield {'data': json.dumps({'type': 'chunk', 'content': chunk, 'messageId': message_id})}
+
+        # CRITICAL: Use the updated history from aiclass (includes all commands and results)
+        # aiclass.process_user_input_stream updates ai.conv_his internally
+        updated_history = ai.conv_his.copy() if hasattr(ai, 'conv_his') and ai.conv_his else conversation_history
 
         # Create AI message
         ai_msg = {
@@ -557,13 +563,13 @@ async def message_generator(ai: AI, user_message: str, conversation_id: str):
             "isStreaming": False
         }
 
-        # Save updated history (including AI response) WITH timestamp
-        conversation_history.append({
-            "role": "assistant",
-            "content": full_response,
-            "timestamp": ai_msg["timestamp"]
-        })
-        history_manager.save_history(conversation_id, conversation_history)
+        # Save updated history (includes all commands, results, and final AI response)
+        # The updated_history from aiclass contains:
+        # - User messages
+        # - All command executions (assistant role)
+        # - All command results (user role with command_execution_prompt)
+        # - Final AI response
+        history_manager.save_history(conversation_id, updated_history)
 
         # Update conversation timestamp
         config = load_conversation_config(conversation_id)
@@ -606,7 +612,8 @@ async def send_message(conversation_id: str, data: SendMessageModel):
         current_time = datetime.now().isoformat()
 
         # Load AI history
-        system_prompt = ai.system_prompt if ai else None
+        # Get effective system prompt (includes tools description + markdown rules)
+        system_prompt = ai.get_effective_system_prompt() if ai else None
         conversation_history = history_manager.load_history(conversation_id, system_prompt or "")
 
         # Add user message to history WITH timestamp
@@ -618,18 +625,14 @@ async def send_message(conversation_id: str, data: SendMessageModel):
         })
 
         # Get AI response
-        response = ai.process_user_input(data.content)
+        response = ai.process_user_input_with_history(data.content, conversation_history)
 
-        # Create AI message WITH timestamp
-        ai_msg_timestamp = datetime.now().isoformat()
-        conversation_history.append({
-            "role": "assistant",
-            "content": response,
-            "timestamp": ai_msg_timestamp
-        })
+        # CRITICAL: Use the updated history from aiclass (includes all commands and results)
+        # aiclass.process_user_input_with_history updates ai.conv_his internally
+        updated_history = ai.conv_his.copy() if hasattr(ai, 'conv_his') and ai.conv_his else conversation_history
 
-        # Save to AI history
-        history_manager.save_history(conversation_id, conversation_history)
+        # Save to AI history (includes all commands and results)
+        history_manager.save_history(conversation_id, updated_history)
 
         # Return in frontend format
         ai_msg = {
@@ -637,7 +640,7 @@ async def send_message(conversation_id: str, data: SendMessageModel):
             "content": response,
             "type": "AI",
             "source": "AI",
-            "timestamp": ai_msg_timestamp,
+            "timestamp": datetime.now().isoformat(),
             "conversationId": conversation_id,
             "isStreaming": False
         }

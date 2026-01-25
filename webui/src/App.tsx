@@ -33,6 +33,7 @@ export default function App() {
     showInitDialog,
     loadConversations,
     closeSettings,
+    closeInitDialog,
     createConversation,
     setCurrentConversation,
   } = useAppStore();
