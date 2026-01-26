@@ -45,7 +45,8 @@
     "appId": "com.lynexus.ai",
     "productName": "LyNexus",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "assets"
     },
     "files": [
       "dist/**/*",
@@ -53,9 +54,23 @@
     ],
     "win": {
       "target": [
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
       ],
-      "icon": "assets/logo.ico"
+      "sign": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerIcon": "assets/logo.ico",
+      "uninstallerIcon": "assets/logo.ico",
+      "installerHeader": "assets/logo.ico",
+      "runAfterFinish": true
     },
     "mac": {
       "target": [
