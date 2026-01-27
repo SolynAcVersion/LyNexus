@@ -114,14 +114,25 @@ export function useMessageInput(options: UseMessageInputOptions): UseMessageInpu
 
   /**
    * Handle drag leave event
+   * Only hide overlay if we're actually leaving the textarea
    */
-  const handleDragLeave = () => {
-    setIsDragging(false);
+  const handleDragLeave = (e: React.DragEvent<HTMLTextAreaElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Check if we're really leaving the element (not just entering a child)
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+
+    if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
+      setIsDragging(false);
+    }
   };
 
   /**
    * Handle drop event
-   * Insert file paths when files are dropped
+   * Insert file absolute paths when files are dropped
    */
   const handleDrop = (e: React.DragEvent<HTMLTextAreaElement>) => {
     e.preventDefault();
@@ -135,9 +146,22 @@ export function useMessageInput(options: UseMessageInputOptions): UseMessageInpu
     if (files.length > 0) {
       onDrop(files);
 
-      // Insert file paths into input
-      const paths = files.map((f) => `"${f.name}"`).join(' ');
-      const newValue = value ? `${value} ${paths}` : paths;
+      // Insert file absolute paths at the beginning of input
+      // In Electron, File objects have a 'path' property
+      // In browser, we fall back to just the filename
+      const paths = files.map((f) => {
+        // Electron provides full path via 'path' property
+        const fullPath = (f as File & { path?: string }).path || f.name;
+        console.log('File dropped:', {
+          name: f.name,
+          path: (f as File & { path?: string }).path,
+          fullPath: fullPath
+        });
+        return `"${fullPath}"`;
+      }).join(' ');
+
+      // Prepend the paths to the current content
+      const newValue = value ? `${paths} ${value}` : paths;
       setValue(newValue);
 
       // Focus back to textarea

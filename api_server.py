@@ -9,6 +9,7 @@ the AI assistant core logic, removing Qt UI dependencies.
 import os
 import sys
 import json
+import io
 import asyncio
 import zipfile
 import logging
@@ -654,9 +655,36 @@ async def send_message(conversation_id: str, data: SendMessageModel):
 
 @app.post("/api/conversations/{conversation_id}/messages/stop")
 async def stop_streaming(conversation_id: str):
-    """Stop streaming response"""
+    """Stop streaming response and kill any running command processes"""
     try:
-        # TODO: Implement streaming stop logic
+        # Get AI instance for this conversation
+        ai = get_ai_instance(conversation_id)
+        if ai:
+            # Set stop flag to stop streaming
+            ai.set_stop_flag(True)
+
+            # Kill any running subprocess if exists
+            if hasattr(ai, 'current_process') and ai.current_process:
+                try:
+                    ai.current_process.kill()
+                    logger.info(f"Killed running process for conversation {conversation_id}")
+                except Exception as proc_error:
+                    logger.warning(f"Failed to kill process: {proc_error}")
+
+            # Stop MCP server processes if they exist
+            if hasattr(ai, 'mcp_managers') and ai.mcp_managers:
+                for server_name, manager in ai.mcp_managers.items():
+                    try:
+                        if hasattr(manager, 'stop_all'):
+                            manager.stop_all()
+                            logger.info(f"Stopped MCP server: {server_name}")
+                    except Exception as mcp_error:
+                        logger.warning(f"Failed to stop MCP server {server_name}: {mcp_error}")
+
+            logger.info(f"Stop flag set for conversation {conversation_id}")
+        else:
+            logger.warning(f"No AI instance found for conversation {conversation_id}")
+
         return {"success": True}
     except Exception as e:
         logger.error(f"Error stopping streaming: {e}")
@@ -923,6 +951,9 @@ async def toggle_mcp_tool(tool_name: str, conversationId: str, enabled: bool):
 async def export_config(conversation_id: str):
     """Export conversation configuration as ZIP"""
     try:
+        logger.info(f"[Export] Export config request for conversation_id: {conversation_id}")
+        logger.info(f"[Export] conversation_id type: {type(conversation_id)}")
+
         import io
 
         # Create ZIP in memory
@@ -931,24 +962,36 @@ async def export_config(conversation_id: str):
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
             # Add settings.json
             config_file = get_conversation_dir(conversation_id) / "settings.json"
+            logger.info(f"[Export] Config file path: {config_file}")
+            logger.info(f"[Export] Config file exists: {config_file.exists()}")
+
             if config_file.exists():
                 zipf.write(config_file, f"{conversation_id}/settings.json")
+                logger.info(f"[Export] Added settings.json to ZIP")
+            else:
+                logger.warning(f"[Export] Config file does not exist: {config_file}")
 
             # Add tools directory
             tools_dir = get_conversation_dir(conversation_id) / "tools"
+            logger.info(f"[Export] Tools directory path: {tools_dir}")
+            logger.info(f"[Export] Tools directory exists: {tools_dir.exists()}")
+
             if tools_dir.exists():
                 for root, dirs, files in os.walk(tools_dir):
                     for file in files:
                         if "__pycache__" in root:
                             continue
                         file_path = Path(root) / file
-                        arcname = f"{conversation_id}/tools/{file.relative_to(tools_dir)}"
+                        arcname = f"{conversation_id}/tools/{file_path.relative_to(tools_dir)}"
                         zipf.write(file_path, arcname)
+                logger.info(f"[Export] Added tools directory to ZIP")
 
         zip_buffer.seek(0)
 
         # Return ZIP file
         filename = f"{conversation_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+
+        logger.info(f"[Export] Successfully created ZIP file: {filename}")
 
         return Response(
             content=zip_buffer.getvalue(),
@@ -959,6 +1002,8 @@ async def export_config(conversation_id: str):
         )
     except Exception as e:
         logger.error(f"Error exporting config: {e}")
+        import traceback
+        logger.error(f"[Export] Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/conversations/{conversation_id}/export/history")
@@ -984,7 +1029,10 @@ async def export_history(conversation_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/conversations/import")
-async def import_config(file: UploadFile = File(...)):
+async def import_config(
+    file: UploadFile = File(...),
+    name: Optional[str] = Form(None)
+):
     """Import conversation configuration from ZIP"""
     try:
         # Read ZIP file
@@ -1016,9 +1064,16 @@ async def import_config(file: UploadFile = File(...)):
             if settings_data:
                 settings_data["createdAt"] = now
                 settings_data["updatedAt"] = now
+                # Use provided name or fallback to settings name
+                if name:
+                    settings_data["name"] = name
                 save_conversation_config(conv_id, settings_data)
             else:
-                save_conversation_config(conv_id, {"name": conv_id, "createdAt": now, "updatedAt": now})
+                save_conversation_config(conv_id, {
+                    "name": name or conv_id,
+                    "createdAt": now,
+                    "updatedAt": now
+                })
 
             # Extract tools
             for file in files:
@@ -1075,10 +1130,29 @@ if __name__ == "__main__":
     print(f"📚 Docs: http://localhost:8000/docs")
     print("="*50 + "\n")
 
-    uvicorn.run(
-        "api_server:app",
-        host="127.0.0.1",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+    # Check for --no-reload flag (useful for production/packaged builds)
+    reload_flag = "--no-reload" not in sys.argv
+
+    print(f"Auto-reload: {'Enabled' if reload_flag else 'Disabled (production mode)'}")
+
+    # Import app directly for PyInstaller/uvicorn compatibility
+    # This avoids the "Could not import module" error in packaged builds
+    if reload_flag:
+        # Development mode: use string reference for auto-reload
+        uvicorn.run(
+            "api_server:app",
+            host="127.0.0.1",
+            port=8000,
+            reload=True,
+            log_level="info"
+        )
+    else:
+        # Production mode: use direct app reference
+        from api_server import app as asgi_app
+        uvicorn.run(
+            asgi_app,
+            host="127.0.0.1",
+            port=8000,
+            reload=False,
+            log_level="info"
+        )

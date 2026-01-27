@@ -154,6 +154,10 @@ export function SettingsDialog({ isOpen, onClose, onSave }: SettingsDialogProps)
     }
 
     try {
+      console.log('[Export] Current conversation:', currentConversation);
+      console.log('[Export] Conversation ID:', currentConversation.id);
+      console.log('[Export] Conversation ID type:', typeof currentConversation.id);
+
       const response = await api.transfer.exportConfig(currentConversation.id);
       if (response.success && response.data) {
         // Create download link for ZIP file

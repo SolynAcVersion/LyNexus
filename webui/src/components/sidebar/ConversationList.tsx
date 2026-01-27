@@ -3,7 +3,7 @@
  * Telegram-style sidebar with conversation list
  */
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Plus,
   Settings,
@@ -14,6 +14,7 @@ import {
   Download,
   Wrench,
   Eraser,
+  FileArchive,
 } from 'lucide-react';
 import { api } from '@services/api';
 import I18n from '@i18n';
@@ -49,12 +50,9 @@ interface ActionButtonProps {
 }
 
 function ActionButton({ icon, label, onClick, variant = 'default' }: ActionButtonProps) {
-  const _isHovered = false;
   return (
     <button
       onClick={onClick}
-      onMouseEnter={() => {}}
-      onMouseLeave={() => {}}
       className={cn(
         'w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200',
         'hover:translate-x-1',
@@ -181,10 +179,12 @@ export function ConversationList({ className }: ConversationListProps) {
     openSettings,
     openInitDialog,
     openToolsList,
+    loadConversations,
   } = useAppStore();
 
   const [isCreating, setIsCreating] = useState(false);
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   /**
    * Handle new chat button click - show dialog
@@ -278,7 +278,7 @@ export function ConversationList({ className }: ConversationListProps) {
         const response = await api.transfer.importConfig(file);
         if (response.success && response.data) {
           // Add the imported conversation to the store
-          const { addConversation, setCurrentConversation, loadConversations } = useAppStore.getState();
+          const { setCurrentConversation, loadConversations } = useAppStore.getState();
           // Reload conversations to get the latest list
           await loadConversations();
           setCurrentConversation(response.data);
@@ -325,12 +325,115 @@ export function ConversationList({ className }: ConversationListProps) {
     }
   }
 
+  /**
+   * Extract conversation name from zip filename
+   * Removes "_config" suffix and generates unique name if needed
+   */
+  function getConversationNameFromZip(fileName: string): string {
+    // Remove .zip extension
+    let name = fileName.replace(/\.zip$/i, '');
+
+    // Remove "_config" suffix if present
+    name = name.replace(/_config$/, '');
+
+    // Check for existing names with the same base
+    const existingNames = new Set(conversations.map(c => c.name.toLowerCase()));
+
+    // If name doesn't exist, use it directly
+    if (!existingNames.has(name.toLowerCase())) {
+      return name;
+    }
+
+    // Find a unique name by appending _1, _2, etc.
+    let counter = 1;
+    let uniqueName = name;
+    while (existingNames.has(uniqueName.toLowerCase())) {
+      uniqueName = `${name}_${counter}`;
+      counter++;
+    }
+
+    return uniqueName;
+  }
+
+  /**
+   * Handle drag over event - only allow zip files
+   */
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Check if dragging files
+    const hasFiles = e.dataTransfer.types.includes('Files');
+    if (hasFiles) {
+      setIsDragging(true);
+    }
+  }, []);
+
+  /**
+   * Handle drag leave event
+   */
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Only hide drag overlay if we're leaving the container
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+
+    if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  /**
+   * Handle drop event - process zip files
+   */
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = Array.from(e.dataTransfer.files);
+
+    // Filter for zip files only
+    const zipFiles = files.filter(file =>
+      file.name.toLowerCase().endsWith('.zip')
+    );
+
+    if (zipFiles.length === 0) {
+      return;
+    }
+
+    // Process first zip file
+    const zipFile = zipFiles[0];
+    const conversationName = getConversationNameFromZip(zipFile.name);
+
+    try {
+      const response = await api.transfer.importConfig(zipFile, conversationName);
+      if (response.success && response.data) {
+        // Reload conversations to get the latest list
+        await loadConversations();
+        setCurrentConversation(response.data);
+        alert(`Configuration imported successfully!\nCreated conversation: ${response.data.name}`);
+      } else {
+        alert('Failed to import: ' + (response.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      alert('Failed to import configuration');
+    }
+  }, [conversations, loadConversations, setCurrentConversation]);
+
   return (
     <div
       className={cn(
-        'flex flex-col h-full bg-dark-bgSecondary border-r border-dark-border',
+        'flex flex-col h-full bg-dark-bgSecondary border-r border-dark-border relative',
         className
       )}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-dark-border">
@@ -443,6 +546,21 @@ export function ConversationList({ className }: ConversationListProps) {
         onClose={() => setShowNewChatDialog(false)}
         onCreate={handleCreateChat}
       />
+
+      {/* Drag and Drop Overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-primary/90 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="flex flex-col items-center gap-4 p-8 rounded-2xl bg-dark-bgSecondary border-2 border-dashed border-primary">
+            <FileArchive size={64} className="text-primary" />
+            <p className="text-xl font-semibold text-dark-text">
+              Drop configuration file here
+            </p>
+            <p className="text-sm text-dark-textSecondary">
+              Import conversation configuration from .zip file
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { Send, Paperclip } from 'lucide-react';
+import { Send, Paperclip, FileUp } from 'lucide-react';
 import { useMessageInput } from '@hooks/useMessageInput';
 import { Button } from '@components/common/Button';
 import { cn } from '../../utils/classnames';
@@ -148,8 +148,8 @@ export function MessageInput({
       {/* Input area */}
       <div
         className={cn(
-          'flex items-end gap-3 px-4 py-3 transition-colors',
-          isDragging && 'bg-primary/10'
+          'flex items-end gap-3 px-4 py-3 transition-all duration-200',
+          isDragging && 'bg-primary/5 scale-[1.02]'
         )}
       >
         {/* Attachment button */}
@@ -202,8 +202,10 @@ export function MessageInput({
 
           {/* Drag overlay */}
           {isDragging && (
-            <div className="absolute inset-0 border-2 border-dashed border-primary rounded-2xl flex items-center justify-center bg-primary/5">
+            <div className="absolute inset-0 border-2 border-dashed border-primary rounded-2xl flex flex-col items-center justify-center bg-primary/10 backdrop-blur-sm animate-in fade-in duration-200">
+              <FileUp size={32} className="text-primary mb-2" />
               <p className="text-primary font-medium">Drop files here</p>
+              <p className="text-xs text-primary/70 mt-1">Files will be attached with full paths</p>
             </div>
           )}
         </div>

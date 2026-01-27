@@ -565,10 +565,13 @@ export const transferAPI = {
    *
    * POST /conversations/import
    */
-  async importConfig(file: File): Promise<APIResponse<Conversation>> {
+  async importConfig(file: File, name?: string): Promise<APIResponse<Conversation>> {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      if (name) {
+        formData.append('name', name);
+      }
 
       const response = await fetch(`${API_BASE_URL}/conversations/import`, {
         method: 'POST',

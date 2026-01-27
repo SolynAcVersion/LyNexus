@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "LyNexus AI Assistant - Modern Web UI",
   "main": "dist-electron/main.js",
-  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
