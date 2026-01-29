@@ -22,7 +22,7 @@ interface UseMessageInputReturn {
   handlePaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
   handleDrop: (e: React.DragEvent<HTMLTextAreaElement>) => void;
   handleDragOver: (e: React.DragEvent<HTMLTextAreaElement>) => void;
-  handleDragLeave: () => void;
+  handleDragLeave: (e: React.DragEvent<HTMLTextAreaElement>) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   isDragging: boolean;
   clearInput: () => void;
