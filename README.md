@@ -1,11 +1,11 @@
 # LyNexus - Community-Driven AI Agent Platform
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.46-blue" alt="Version">
+  <img src="https://img.shields.io/badge/Version-1.0.6-blue" alt="Version">
   <img src="https://img.shields.io/badge/License-MPL%202.0-green" alt="License">
   <img src="https://img.shields.io/badge/Python-3.10+-yellow" alt="Python">
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
-  <img src="https://img.shields.io/badge/WebUI-React%202024-blue" alt="WebUI">
+  <img src="https://img.shields.io/badge/WebUI-React%202026-blue" alt="WebUI">
 </p>
 
 <div align="center">
@@ -30,16 +30,14 @@ LyNexus is a **community-driven AI agent platform** that empowers developers to 
 - **Custom System Prompts**: Tailor AI behavior to your exact needs
 - **MCP Integration**: Seamlessly integrate Model Context Protocol tools
 
-### 🌐 **Dual Interface Architecture**
-- **Modern WebUI**: Built with React + Vite + Tailwind CSS
-  - Telegram-style chat interface
-  - Real-time streaming responses
-  - Dark theme optimized for long sessions
-  - File drag-and-drop support
-- **Desktop Application**: PySide6/Qt-based native experience
-  - Windows 11 inspired UI design
-  - Multi-conversation management
-  - Export chats as TXT, JSON, or Markdown
+### 🌐 **Modern Interface**
+- Built with React + Vite + Tailwind CSS
+- Telegram-style chat interface
+- Real-time streaming responses
+- Dark theme optimized for long sessions
+- File drag-and-drop support
+- Multi-conversation management
+- Export chats as TXT, JSON, or Markdown
 
 ### 🔄 **Community-Driven Ecosystem**
 - **One-Click Export**: Package your entire configuration for sharing
@@ -48,51 +46,36 @@ LyNexus is a **community-driven AI agent platform** that empowers developers to 
 - **Stand on Giants' Shoulders**: Build upon community-tested configurations
 
 ### ⚡ **Advanced Tooling**
+- **Dynamic Tool Discovery**: AI automatically understands and uses MCP tools through their descriptions - no hardcoded tool names
 - **Command Execution**: AI can execute shell commands (configurable)
-- **Tool Integration**: Connect to various APIs and services via MCP
+- **Tool Integration**: Connect to various APIs and services via MCP protocol
 - **Execution Control**: Stop long-running operations anytime
 - **History Management**: Preserve and load conversation history
 
 ## 🚀 Quick Start
 
-### Option 1: Modern WebUI (Recommended)
+### Development Mode
 
-#### Windows
-1. Double-click `start.bat`
-2. Wait for both servers to start
-3. Browser opens automatically at http://localhost:5173
-
-#### Linux/Mac
 ```bash
-# Install dependencies
-pip install -r requirements-api.txt
-cd webui && npm install
+# Terminal 1: Start API server
+uv run uvicorn api_server:app --reload
 
-# Start the application
-cd ..
-python start_dev.py
+# Terminal 2: Start WebUI
+cd webui
+npm run dev
 ```
 
-### Option 2: Desktop Application
+Open http://localhost:5173 in your browser.
 
-#### Windows
-```bash
-python main.py
-```
+### Release Version
 
-#### Linux/Mac
-```bash
-python3 main.py
-```
+🚧 **Coming soon** - Pre-built release packages will be available for download.
 
 ## 📦 Project Structure
 
 ```
 LyNexus/
-├── main.py                 # Desktop application entry point (PySide6)
-├── api_server.py           # FastAPI backend for WebUI
-├── start_dev.py            # Quick start script for WebUI
-├── start.bat               # Windows quick start script
+├── api_server.py           # FastAPI backend server
 ├── aiclass.py              # Core AI functionality
 ├── mcp_utils.py            # MCP protocol utilities
 │
@@ -104,12 +87,6 @@ LyNexus/
 │   ├── electron/           # Electron desktop wrapper
 │   ├── package.json
 │   └── vite.config.ts
-│
-├── ui/                     # PySide6 Desktop UI
-│   ├── chat_box.py         # Main chat interface
-│   ├── init_dialog.py      # Initialization dialog
-│   ├── settings_dialog.py  # Settings interface
-│   └── mcp_tools_widget.py # MCP tools display
 │
 ├── tools/                  # MCP Tools Implementation
 │   ├── files.py            # File operations
@@ -126,39 +103,14 @@ LyNexus/
 ├── config/                 # Configuration files
 ├── data/                   # User data directory
 │   └── conversations/      # Conversation storage
-├── conversations/          # Legacy conversation storage
 ├── docs/                   # Documentation
 │   ├── README.md           # English documentation
 │   └── zh-cn/README.md     # Chinese documentation
 │
 ├── requirements.txt        # Python dependencies
-├── requirements-api.txt    # API server dependencies
 ├── pyproject.toml          # Project configuration
 └── uv.lock                 # Dependency lock file
 ```
-
-## 🔧 First Time Setup
-
-### 1. Install Python Dependencies
-```bash
-pip install -r requirements-api.txt
-```
-
-### 2. Install WebUI Dependencies
-```bash
-cd webui
-npm install
-cd ..
-```
-
-### 3. Configure API Key
-- Open the application
-- Click "Initialize" or go to Settings
-- Enter your API key:
-  - **DeepSeek**: https://platform.deepseek.com
-  - **OpenAI**: https://platform.openai.com
-  - **Anthropic**: https://console.anthropic.com
-- Save and start chatting!
 
 ## 📖 Documentation
 
@@ -187,7 +139,7 @@ Once the API server is running, visit:
 
 ### Start Backend Only
 ```bash
-python -m uvicorn api_server:app --reload
+uv run uvicorn api_server:app --reload
 ```
 
 ### Start Frontend Only
@@ -196,13 +148,13 @@ cd webui
 npm run dev
 ```
 
-### Build WebUI for Production
+### Build WebUI
 ```bash
 cd webui
 npm run build
 ```
 
-### Build Electron Desktop App
+### Build Electron App
 ```bash
 cd webui
 npm run electron:build
@@ -216,29 +168,6 @@ All conversations and settings are stored in:
   - `.confignore` - API key (not exported)
   - `{id}_ai.json` - Message history
   - `tools/` - MCP tool files
-
-## 🔄 Migration from Qt UI
-
-Your existing conversations are automatically compatible!
-
-The new WebUI uses the same data structure as the Qt application, so all your existing conversations will appear automatically.
-
-### What Changed
-
-| Component | Qt UI | WebUI |
-|-----------|-------|-------|
-| **Interface** | PySide6/Qt | React + Vite |
-| **Backend** | Embedded in Qt | FastAPI |
-| **Styling** | QSS | Tailwind CSS |
-| **State** | Qt Signals | Zustand |
-| **Communication** | Direct calls | REST API |
-
-### What Stayed the Same
-
-- ✅ AI core logic (`aiclass.py`)
-- ✅ Data managers (`utils/`)
-- ✅ Conversation storage structure
-- ✅ MCP tool integration
 
 ## 🤝 Community & Contribution
 
@@ -290,39 +219,6 @@ lsof -ti:5173 | xargs kill -9
 1. Go to Settings (gear icon in sidebar)
 2. Enter your API key
 3. Click "Save Settings"
-
-## 🚀 Production Deployment
-
-### Run with Production Server
-```bash
-# Install gunicorn
-pip install gunicorn
-
-# Run with 4 workers
-gunicorn api_server:app -w 4 -k uvicorn.workers.UvicornWorker
-```
-
-### Serve WebUI with Nginx
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    # API server
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-
-    # WebUI static files
-    location / {
-        root /path/to/LyNexus/webui/dist;
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
 
 ## 📄 License
 

@@ -1,11 +1,11 @@
 # LyNexus - 社区驱动的AI智能体平台
 
 <p align="center">
-  <img src="https://img.shields.io/badge/版本-0.46-blue" alt="版本">
+  <img src="https://img.shields.io/badge/版本-1.0.6-blue" alt="版本">
   <img src="https://img.shields.io/badge/许可证-MPL%202.0-green" alt="许可证">
   <img src="https://img.shields.io/badge/Python-3.10+-yellow" alt="Python">
   <img src="https://img.shields.io/badge/平台-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="平台">
-  <img src="https://img.shields.io/badge/WebUI-React%202024-blue" alt="WebUI">
+  <img src="https://img.shields.io/badge/WebUI-React%202026-blue" alt="WebUI">
 </p>
 
 <div align="center">
@@ -30,16 +30,14 @@ LyNexus是一个**社区驱动的AI智能体平台**，使开发者能够创建�
 - **自定义系统提示**：根据需要量身定制AI行为
 - **MCP集成**：无缝集成模型上下文协议工具
 
-### 🌐 **双界面架构**
-- **现代化WebUI**：基于 React + Vite + Tailwind CSS 构建
-  - Telegram风格的聊天界面
-  - 实时流式响应
-  - 暗色调主题，适合长时间会话
-  - 文件拖拽支持
-- **桌面应用**：基于 PySide6/Qt 的原生体验
-  - Windows 11风格UI设计
-  - 多对话管理
-  - 导出聊天为TXT、JSON或Markdown格式
+### 🌐 **现代化界面**
+- 基于 React + Vite + Tailwind CSS 构建
+- Telegram 风格的聊天界面
+- 实时流式响应
+- 暗色调主题，适合长时间会话
+- 文件拖拽支持
+- 多对话管理
+- 导出聊天为 TXT、JSON 或 Markdown 格式
 
 ### 🔄 **社区驱动的生态系统**
 - **一键导出**：打包整个配置用于分享
@@ -48,51 +46,36 @@ LyNexus是一个**社区驱动的AI智能体平台**，使开发者能够创建�
 - **站在巨人肩膀上**：基于经过社区测试的配置构建
 
 ### ⚡ **高级工具**
+- **动态工具发现**：AI 通过工具描述自动理解和使用 MCP 工具 - 无需硬编码工具名
 - **命令执行**：AI可以执行shell命令（可配置）
-- **工具集成**：通过MCP连接各种API和服务
+- **工具集成**：通过 MCP 协议连接各种API和服务
 - **执行控制**：随时停止长时间运行的操作
 - **历史管理**：保留和加载对话历史
 
 ## 🚀 快速开始
 
-### 方式一：现代化WebUI（推荐）
+### 开发模式
 
-#### Windows
-1. 双击 `start.bat`
-2. 等待两个服务器启动
-3. 浏览器会自动打开 http://localhost:5173
-
-#### Linux/Mac
 ```bash
-# 安装依赖
-pip install -r requirements-api.txt
-cd webui && npm install
+# 终端 1：启动 API 服务器
+uv run uvicorn api_server:app --reload
 
-# 启动应用
-cd ..
-python start_dev.py
+# 终端 2：启动 WebUI
+cd webui
+npm run dev
 ```
 
-### 方式二：桌面应用
+在浏览器中打开 http://localhost:5173
 
-#### Windows
-```bash
-python main.py
-```
+### 发行版本
 
-#### Linux/Mac
-```bash
-python3 main.py
-```
+🚧 **即将推出** - 预构建的发行版本即将可以下载。
 
 ## 📦 项目结构
 
 ```
 LyNexus/
-├── main.py                 # 桌面应用入口点 (PySide6)
-├── api_server.py           # WebUI 的 FastAPI 后端
-├── start_dev.py            # WebUI 快速启动脚本
-├── start.bat               # Windows 快速启动脚本
+├── api_server.py           # FastAPI 后端服务器
 ├── aiclass.py              # 核心AI功能
 ├── mcp_utils.py            # MCP 协议工具
 │
@@ -104,12 +87,6 @@ LyNexus/
 │   ├── electron/           # Electron 桌面包装器
 │   ├── package.json
 │   └── vite.config.ts
-│
-├── ui/                     # PySide6 桌面UI
-│   ├── chat_box.py         # 主聊天界面
-│   ├── init_dialog.py      # 初始化对话框
-│   ├── settings_dialog.py  # 设置界面
-│   └── mcp_tools_widget.py # MCP 工具显示
 │
 ├── tools/                  # MCP 工具实现
 │   ├── files.py            # 文件操作
@@ -126,39 +103,14 @@ LyNexus/
 ├── config/                 # 配置文件
 ├── data/                   # 用户数据目录
 │   └── conversations/      # 对话存储
-├── conversations/          # 旧版对话存储
 ├── docs/                   # 文档
 │   ├── README.md           # 英文文档
 │   └── zh-cn/README.md     # 中文文档
 │
 ├── requirements.txt        # Python 依赖
-├── requirements-api.txt    # API 服务器依赖
 ├── pyproject.toml          # 项目配置
 └── uv.lock                 # 依赖锁定文件
 ```
-
-## 🔧 首次设置
-
-### 1. 安装 Python 依赖
-```bash
-pip install -r requirements-api.txt
-```
-
-### 2. 安装 WebUI 依赖
-```bash
-cd webui
-npm install
-cd ..
-```
-
-### 3. 配置 API 密钥
-- 打开应用
-- 点击"初始化"或进入设置
-- 输入您的 API 密钥：
-  - **DeepSeek**: https://platform.deepseek.com
-  - **OpenAI**: https://platform.openai.com
-  - **Anthropic**: https://console.anthropic.com
-- 保存并开始聊天！
 
 ## 📖 文档
 
@@ -187,7 +139,7 @@ API 服务器运行后，访问：
 
 ### 仅启动后端
 ```bash
-python -m uvicorn api_server:app --reload
+uv run uvicorn api_server:app --reload
 ```
 
 ### 仅启动前端
@@ -196,13 +148,13 @@ cd webui
 npm run dev
 ```
 
-### 构建生产版 WebUI
+### 构建 WebUI
 ```bash
 cd webui
 npm run build
 ```
 
-### 构建 Electron 桌面应用
+### 构建 Electron 应用
 ```bash
 cd webui
 npm run electron:build
@@ -216,29 +168,6 @@ npm run electron:build
   - `.confignore` - API密钥（不导出）
   - `{id}_ai.json` - 消息历史
   - `tools/` - MCP 工具文件
-
-## 🔄 从 Qt UI 迁移
-
-您现有的对话自动兼容！
-
-新的 WebUI 使用与 Qt 应用相同的数据结构，因此所有现有对话都会自动显示。
-
-### 变化对比
-
-| 组件 | Qt UI | WebUI |
-|------|-------|-------|
-| **界面** | PySide6/Qt | React + Vite |
-| **后端** | 嵌入在 Qt 中 | FastAPI |
-| **样式** | QSS | Tailwind CSS |
-| **状态** | Qt 信号 | Zustand |
-| **通信** | 直接调用 | REST API |
-
-### 保持不变
-
-- ✅ AI 核心逻辑 (`aiclass.py`)
-- ✅ 数据管理器 (`utils/`)
-- ✅ 对话存储结构
-- ✅ MCP 工具集成
 
 ## 🤝 社区与贡献
 
@@ -290,39 +219,6 @@ lsof -ti:5173 | xargs kill -9
 1. 进入设置（侧边栏中的齿轮图标）
 2. 输入您的 API 密钥
 3. 点击"保存设置"
-
-## 🚀 生产部署
-
-### 使用生产服务器运行
-```bash
-# 安装 gunicorn
-pip install gunicorn
-
-# 使用4个worker运行
-gunicorn api_server:app -w 4 -k uvicorn.workers.UvicornWorker
-```
-
-### 使用 Nginx 服务 WebUI
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    # API 服务器
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-
-    # WebUI 静态文件
-    location / {
-        root /path/to/LyNexus/webui/dist;
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
 
 ## 📄 许可证
 
