@@ -16,21 +16,21 @@
   <a href="README.md">English</a>
 </div>
 
-## 🌟 LyNexus是什么？
+## LyNexus是什么？
 
 LyNexus是一个**社区驱动的AI智能体平台**，使开发者能够创建、定制和分享具有可配置提示词、工具和行为参数的智能体。该平台以灵活性和协作为核心理念打造，将AI开发转变为共享的体验。
 
-🎯 **核心理念**：一次创造，处处分享。向他人学习，加速构建。
+**核心理念**：一次创造，处处分享。向他人学习，加速构建。
 
-## ✨ 功能特性
+## 功能特性
 
-### 🤖 **灵活的AI配置**
+### 灵活的AI配置
 - **模型无关**：连接多种AI模型（DeepSeek、OpenAI、Anthropic等）
 - **参数自定义**：精确调节温度、tokens数、惩罚项等参数
 - **自定义系统提示**：根据需要量身定制AI行为
 - **MCP集成**：无缝集成模型上下文协议工具
 
-### 🌐 **现代化界面**
+### 现代化界面
 - 基于 React + Vite + Tailwind CSS 构建
 - Telegram 风格的聊天界面
 - 实时流式响应
@@ -39,26 +39,26 @@ LyNexus是一个**社区驱动的AI智能体平台**，使开发者能够创建�
 - 多对话管理
 - 导出聊天为 TXT、JSON 或 Markdown 格式
 
-### 🔄 **社区驱动的生态系统**
+### 社区驱动的生态系统
 - **一键导出**：打包整个配置用于分享
 - **一键导入**：立即使用他人优化的配置
 - **配置分享**：分享和发现配置
 - **站在巨人肩膀上**：基于经过社区测试的配置构建
 
-### ⚡ **高级工具**
+### 高级工具
 - **动态工具发现**：AI 通过工具描述自动理解和使用 MCP 工具 - 无需硬编码工具名
 - **命令执行**：AI可以执行shell命令（可配置）
 - **工具集成**：通过 MCP 协议连接各种API和服务
 - **执行控制**：随时停止长时间运行的操作
 - **历史管理**：保留和加载对话历史
 
-## 🚀 快速开始
+## 快速开始
 
 ### 开发模式
 
 ```bash
 # 终端 1：启动 API 服务器
-uv run uvicorn api_server:app --reload
+python -m uvicorn api_server:app --reload
 
 # 终端 2：启动 WebUI
 cd webui
@@ -69,9 +69,9 @@ npm run dev
 
 ### 发行版本
 
-🚧 **即将推出** - 预构建的发行版本即将可以下载。
+**即将推出** - 预构建的发行版本即将可以下载。
 
-## 📦 项目结构
+## 项目结构
 
 ```
 LyNexus/
@@ -112,13 +112,9 @@ LyNexus/
 └── uv.lock                 # 依赖锁定文件
 ```
 
-## 📖 文档
+## 文档
 
-详细的安装、配置和使用说明：
-
-- **[文档网站](https://solynacversion.github.io/LyNexus)**
-- **[API 文档](README_API.md)** - 后端API参考
-- **[WebUI 指南](docs/zh-cn/README.md)** - WebUI 专项文档
+详细的安装、配置和使用说明，请访问我们的[文档网站](https://solynacversion.github.io/LyNexus)。
 
 文档包含：
 - 安装和设置
@@ -129,17 +125,17 @@ LyNexus/
 - API 参考
 - 等等！
 
-## 🔌 API 文档
+## API 端点
 
 API 服务器运行后，访问：
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 
-## 🏗️ 开发
+## 开发
 
 ### 仅启动后端
 ```bash
-uv run uvicorn api_server:app --reload
+python -m uvicorn api_server:app --reload
 ```
 
 ### 仅启动前端
@@ -160,7 +156,7 @@ cd webui
 npm run electron:build
 ```
 
-## 📁 数据位置
+## 数据位置
 
 所有对话和设置存储在：
 - `data/conversations/{id}/` - 每个对话的数据
@@ -169,7 +165,7 @@ npm run electron:build
   - `{id}_ai.json` - 消息历史
   - `tools/` - MCP 工具文件
 
-## 🤝 社区与贡献
+## 社区与贡献
 
 #### 加入社区
 - **GitHub Issues**: 报告错误和请求功能
@@ -188,7 +184,7 @@ npm run electron:build
 
 查看[贡献指南](CONTRIBUTING.md)了解详情。
 
-## 🐛 故障排除
+## 故障排除
 
 ### 端口 8000 已被占用
 ```bash
@@ -220,11 +216,11 @@ lsof -ti:5173 | xargs kill -9
 2. 输入您的 API 密钥
 3. 点击"保存设置"
 
-## 📄 许可证
+## 许可证
 
 本项目采用 Mozilla Public License 2.0 许可证 - 详见 [LICENSE](LICENSE) 文件。
 
-## 🙏 致谢
+## 致谢
 
 - **AI社区**：感谢分享知识和配置的社区
 - **开源项目**：使本平台成为可能
@@ -234,11 +230,11 @@ lsof -ti:5173 | xargs kill -9
 ---
 
 <div align="center">
-  <p><strong>由AI社区🫶为AI社区打造</strong></p>
+  <p><strong>由AI社区为AI社区打造</strong></p>
   <p>
     <a href="https://solynacversion.github.io/LyNexus">文档</a> •
     <a href="https://github.com/SolynAcVersion/LyNexus/issues">问题反馈</a> •
     <a href="https://github.com/SolynAcVersion/LyNexus/discussions">讨论区</a>
   </p>
-  <p><i>如果觉得这个项目有用，请给它一个⭐吧！</i></p>
+  <p><i>如果觉得这个项目有用，请给它一个星标吧！</i></p>
 </div>

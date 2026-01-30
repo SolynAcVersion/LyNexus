@@ -16,21 +16,21 @@
   <a href="README_zh_cn.md">简体中文</a>
 </div>
 
-## 🌟 What is LyNexus?
+## What is LyNexus?
 
 LyNexus is a **community-driven AI agent platform** that empowers developers to create, customize, and share intelligent agents with configurable prompts, tools, and behavior parameters. Built with flexibility and collaboration in mind, it transforms AI development into a shared experience.
 
-🎯 **Key Philosophy**: Create once, share everywhere. Learn from others, build faster.
+**Key Philosophy**: Create once, share everywhere. Learn from others, build faster.
 
-## ✨ Features
+## Features
 
-### 🤖 **Flexible AI Configuration**
+### Flexible AI Configuration
 - **Model Agnostic**: Connect to various AI models (DeepSeek, OpenAI, Anthropic, etc.)
 - **Parameter Freedom**: Fine-tune temperature, tokens, penalties, and more
 - **Custom System Prompts**: Tailor AI behavior to your exact needs
 - **MCP Integration**: Seamlessly integrate Model Context Protocol tools
 
-### 🌐 **Modern Interface**
+### Modern Interface
 - Built with React + Vite + Tailwind CSS
 - Telegram-style chat interface
 - Real-time streaming responses
@@ -39,26 +39,26 @@ LyNexus is a **community-driven AI agent platform** that empowers developers to 
 - Multi-conversation management
 - Export chats as TXT, JSON, or Markdown
 
-### 🔄 **Community-Driven Ecosystem**
+### Community-Driven Ecosystem
 - **One-Click Export**: Package your entire configuration for sharing
 - **One-Click Import**: Use others' optimized setups instantly
 - **Configuration Sharing**: Share & discover configurations
 - **Stand on Giants' Shoulders**: Build upon community-tested configurations
 
-### ⚡ **Advanced Tooling**
+### Advanced Tooling
 - **Dynamic Tool Discovery**: AI automatically understands and uses MCP tools through their descriptions - no hardcoded tool names
 - **Command Execution**: AI can execute shell commands (configurable)
 - **Tool Integration**: Connect to various APIs and services via MCP protocol
 - **Execution Control**: Stop long-running operations anytime
 - **History Management**: Preserve and load conversation history
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Development Mode
 
 ```bash
 # Terminal 1: Start API server
-uv run uvicorn api_server:app --reload
+python -m uvicorn api_server:app --reload
 
 # Terminal 2: Start WebUI
 cd webui
@@ -69,9 +69,9 @@ Open http://localhost:5173 in your browser.
 
 ### Release Version
 
-🚧 **Coming soon** - Pre-built release packages will be available for download.
+**Coming soon** - Pre-built release packages will be available for download.
 
-## 📦 Project Structure
+## Project Structure
 
 ```
 LyNexus/
@@ -112,13 +112,9 @@ LyNexus/
 └── uv.lock                 # Dependency lock file
 ```
 
-## 📖 Documentation
+## Documentation
 
-For detailed installation, configuration, and usage instructions:
-
-- **[Documentation Website](https://solynacversion.github.io/LyNexus)**
-- **[API Documentation](README_API.md)** - Backend API reference
-- **[WebUI Guide](docs/README.md)** - WebUI specific documentation
+For detailed installation, configuration, and usage instructions, visit our [documentation website](https://solynacversion.github.io/LyNexus).
 
 The documentation covers:
 - Installation and setup
@@ -129,17 +125,17 @@ The documentation covers:
 - API reference
 - And much more!
 
-## 🔌 API Documentation
+## API Endpoints
 
 Once the API server is running, visit:
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 
-## 🏗️ Development
+## Development
 
 ### Start Backend Only
 ```bash
-uv run uvicorn api_server:app --reload
+python -m uvicorn api_server:app --reload
 ```
 
 ### Start Frontend Only
@@ -160,7 +156,7 @@ cd webui
 npm run electron:build
 ```
 
-## 📁 Data Location
+## Data Location
 
 All conversations and settings are stored in:
 - `data/conversations/{id}/` - Per-conversation data
@@ -169,7 +165,7 @@ All conversations and settings are stored in:
   - `{id}_ai.json` - Message history
   - `tools/` - MCP tool files
 
-## 🤝 Community & Contribution
+## Community & Contribution
 
 #### Join Our Community
 - **GitHub Issues**: Report bugs and request features
@@ -188,7 +184,7 @@ We welcome contributions! Here's how you can help:
 
 Check out our [Contributing Guidelines](CONTRIBUTING.md) for details.
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Port 8000 Already in Use
 ```bash
@@ -220,11 +216,11 @@ lsof -ti:5173 | xargs kill -9
 2. Enter your API key
 3. Click "Save Settings"
 
-## 📄 License
+## License
 
 This project is licensed under the Mozilla Public License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **AI Community**: For sharing knowledge and configurations
 - **Open Source Projects**: That made this platform possible
@@ -234,11 +230,11 @@ This project is licensed under the Mozilla Public License 2.0 - see the [LICENSE
 ---
 
 <div align="center">
-  <p><strong>Built with ❤️ by the AI community, for the AI community</strong></p>
+  <p><strong>Built with passion by the AI community, for the AI community</strong></p>
   <p>
     <a href="https://solynacversion.github.io/LyNexus">Documentation</a> •
     <a href="https://github.com/SolynAcVersion/LyNexus/issues">Issues</a> •
     <a href="https://github.com/SolynAcVersion/LyNexus/discussions">Discussions</a>
   </p>
-  <p><sub>Star ⭐ this repository if you find it useful!</sub></p>
+  <p><sub>Star this repository if you find it useful!</sub></p>
 </div>
