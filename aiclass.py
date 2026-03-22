@@ -41,41 +41,48 @@ class AI:
         return """
 You are an AI assistant using the ReAct (Reasoning + Acting) paradigm.
 
-【Format】
-Thought: [your reasoning]
-Action: [tool_name]
+【CRITICAL RULES - YOU MUST FOLLOW THESE EXACTLY】
+1. NEVER make up tool names. ONLY use tools from the list below.
+2. NEVER guess information. ALWAYS call tools to get real data.
+3. EVERY response must start with "Thought:" followed by reasoning
+4. Then output "Action:" with a tool name from the available list
+5. Wait for "Observation:" before continuing
+6. Only use "final_answer" when you have actual results from tools
 
-Wait for Observation before your next Thought.
+【Response Format - EVERY TIME】
+Thought: [what you're thinking and why]
+Action: [exact tool name from the list below]
 
-【Rules】
-1. Start with "Thought:" before any "Action:"
-2. Each Action should be ONE single step
-3. Use "Action: final_answer: [answer]" when task is complete
+【Tool Usage Process】
+Step 1: Output just the tool name (e.g., "Action: ls") to get its parameters
+Step 2: After seeing the parameters, execute with values (e.g., "Action: ls(directory="/home/user")")
 
 【Example】
-User: What's the current date?
+User: List files in my home directory
 
-Thought: User wants current date. Use get_current_date tool.
-Action: get_current_date
+Thought: I need to list directory contents. The available tool is "ls".
+Action: ls
 
-Observation: [Tool: get_current_date]
-Description: Get current system date
-Parameters: None
+Observation: [Tool: ls]
+Description: List directory contents
+Parameters: directory (string, default=".")
 
-Thought: Got tool details. Execute it.
-Action: get_current_date()
+Thought: I'll execute ls to list the home directory.
+Action: ls(directory="/home/user")
 
-Observation: 
+Observation: file1.txt, file2.py, documents/
 
-Thought: Successfully obtained date. Provide final answer.
-Action: final_answer: Today's date is 2026-03-22.
+Thought: Successfully got the directory listing. I can now answer.
+Action: final_answer: Your home directory contains: file1.txt, file2.py, and a documents folder.
 
-【Available Tools】
+【Available Tools - USE ONLY THESE】
 {TOOLS_LIST}
 
-【Tool Usage】
-- First Action: Output tool name to get detailed information
-- Second Action: Use tool_name(param1=value1, param2=value2) to execute
+【IMPORTANT WARNINGS】
+- If you use a tool NOT in this list, you will get an error
+- Check the tool list carefully before outputting Action:
+- Common file tools: ls, cat, mv, cp, mkdir, rm
+- Common OCR tools: ocr_process_pdf, ocr_process_pictures
 """
 
     def get_effective_system_prompt(self):
@@ -137,7 +144,7 @@ Action: final_answer: Today's date is 2026-03-22.
             return None, {}
 
     def load_mult_mcp_mod(self, mcp_paths):
-        """Load multiple MCP module files"""
+        """Load mult MCP module files"""
         all_funcs = {}
         all_mods = []
 
@@ -147,8 +154,6 @@ Action: final_answer: Today's date is 2026-03-22.
                 all_mods.append(mod)
             if funcs:
                 for func_name, func in funcs.items():
-                    if func_name in all_funcs:
-                        print(f"Function '{func_name}' exists in multiple files, using last loaded version")
                     all_funcs[func_name] = func
         return all_mods, all_funcs
 
@@ -190,12 +195,9 @@ Action: final_answer: Today's date is 2026-03-22.
         if not self.tool_registry:
             return ""
 
-        desc = "【Available Tools】\n"
+        desc = ""
         for func_name, info in self.tool_registry.items():
             desc += f"- {func_name}: {info['summary']}\n"
-
-        desc += "\nTo use a tool, output: Action: tool_name\n"
-        desc += "You will receive detailed parameter information before execution.\n"
 
         return desc
 
@@ -239,6 +241,14 @@ Action: final_answer: Today's date is 2026-03-22.
         for path in self.mcp_paths:
             if not os.path.exists(path):
                 print(f"File does not exist: {path}")
+            elif os.path.isdir(path):
+                # 如果是目录，扫描所有 .py 和 .json 文件
+                print(f"Scanning directory: {path}")
+                for file in os.listdir(path):
+                    if file.endswith('.py') or file.endswith('.json'):
+                        full_path = os.path.join(path, file)
+                        valid_paths.append(full_path)
+                        print(f"  Found: {file}")
             else:
                 valid_paths.append(path)
         print(f"Will load {len(valid_paths)} MCP files")
@@ -302,7 +312,8 @@ Action: final_answer: Today's date is 2026-03-22.
             else:
                 res = self.funcs[func_name](*args, **kwargs)
 
-            return f"Execution successful: {res}"
+            # 直接返回结果，不添加额外文本
+            return str(res)
         except Exception as e:
             return f"Execution failed: {e}"
 
@@ -314,27 +325,31 @@ Action: final_answer: Today's date is 2026-03-22.
         action = match.group(1)
 
         if action == "final_answer":
-            answer_match = re.search(r'Action:\s*final_answer:\s*(.+)', text, re.DOTALL)
-            if answer_match:
-                return "final_answer", answer_match.group(1).strip()
-            return "final_answer", ""
+            return "final_answer", text.split("Action: final_answer:", 1)[1].strip()
+
+        # 检查是否有括号（表示意图执行）
+        has_parens = re.search(rf'{action}\s*\(', text)
 
         params = {}
         params_match = re.search(rf'{action}\s*\((.*?)\)', text)
         if params_match:
             params_str = params_match.group(1)
-            try:
-                for pair in params_str.split(','):
-                    pair = pair.strip()
-                    if '=' in pair:
-                        key, value = pair.split('=', 1)
-                        params[key.strip()] = value.strip()
-                    elif pair:
-                        params['value'] = pair.strip()
-            except:
-                pass
+            # 如果括号内有内容，解析参数
+            if params_str.strip():
+                try:
+                    for pair in params_str.split(','):
+                        pair = pair.strip()
+                        if '=' in pair:
+                            key, value = pair.split('=', 1)
+                            params[key.strip()] = value.strip()
+                        elif pair:
+                            params['value'] = pair.strip()
+                except:
+                    pass
 
-        return action, params
+        # 返回 (action, params, has_parens)
+        # has_parens=True 表示意图执行，False 表示只是查询
+        return action, params, has_parens if has_parens else False
 
     def react_loop(self, user_inp, max_iter=15):
         self.conv_his.append({"role": "user", "content": user_inp})
@@ -347,32 +362,37 @@ Action: final_answer: Today's date is 2026-03-22.
                     messages=self.conv_his,
                     stream=False
                 )
-                reply = response.choices[0].message.content
+                reply = response.choices[0].message.content.strip()
+
+                if "Thought:" in reply:
+                    parts = reply.split("Thought:", 1)
+                    if len(parts) > 1:
+                        thought_part = parts[1].split("Action:", 1)[0].strip()
+                        if thought_part:
+                            print(f"\n[Thought] {thought_part}")
 
                 self.conv_his.append({"role": "assistant", "content": reply})
 
                 if "Action: final_answer:" in reply:
-                    answer_match = re.search(r'Action:\s*final_answer:\s*(.+)', reply, re.DOTALL)
-                    if answer_match:
-                        return answer_match.group(1).strip()
-                    return "Task completed"
+                    return reply.split("Action: final_answer:", 1)[1].strip()
 
-                action, params = self.parse_action(reply)
+                action, params, has_parens = self.parse_action(reply)
 
                 if action is None:
                     return reply
 
                 if action in self.tool_registry:
-                    if params:
-                        print(f"\n[Step {step + 1}] Executing: {action}")
+                    if has_parens:  # 有括号，意图执行
+                        print(f"[Action] Executing: {action}")
                         res = self.exec_func(action, **params)
                         observation = f"Execution result: {res}"
-                        print(f"Result: {res}")
-                    else:
-                        print(f"\n[Step {step + 1}] Tool query: {action}")
+                    else:  # 无括号，查询工具详情
                         observation = self.get_tool_detail(action)
                 else:
-                    observation = f"Error: Tool '{action}' not found"
+                    available_tools = list(self.tool_registry.keys())
+                    observation = f"Error: Tool '{action}' not found. Available tools: {', '.join(available_tools[:10])}"
+                    if len(available_tools) > 10:
+                        observation += f" ... and {len(available_tools) - 10} more"
                     print(f"Warning: {observation}")
 
                 self.conv_his.append({"role": "user", "content": f"Observation: {observation}"})
@@ -448,13 +468,12 @@ Action: final_answer: Today's date is 2026-03-22.
                     yield reply
 
                 if "Action: final_answer:" in reply:
-                    answer_match = re.search(r'Action:\s*final_answer:\s*(.+)', reply, re.DOTALL)
-                    if answer_match:
-                        self.conv_his.append({"role": "assistant", "content": reply})
-                        yield f"\n[Final Answer] {answer_match.group(1).strip()}"
+                    answer = reply.split("Action: final_answer:", 1)[1].strip()
+                    self.conv_his.append({"role": "assistant", "content": reply})
+                    yield f"\n[Final Answer] {answer}"
                     break
 
-                action, params = self.parse_action(reply)
+                action, params, has_parens = self.parse_action(reply)
 
                 if action is None:
                     self.conv_his.append({"role": "assistant", "content": reply})
@@ -463,7 +482,7 @@ Action: final_answer: Today's date is 2026-03-22.
                 self.conv_his.append({"role": "assistant", "content": reply})
 
                 if action in self.tool_registry:
-                    if params:
+                    if has_parens:
                         res = self.exec_func(action, **params)
                         observation = f"Execution result: {res}"
                         yield f"\n[Observation - Result]\n{observation}"

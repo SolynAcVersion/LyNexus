@@ -16,11 +16,11 @@ class MCPServerManager:
         self.read_threads = {}
     
     def parse_config(self, conf_json):
-        # 解析MCP
         try:
             conf = json.loads(conf_json)
-            mcp_servers = conf.get("mcpServers", {})
-            
+            # 兼容两种格式：mcpServers 和 servers
+            mcp_servers = conf.get("mcpServers") or conf.get("servers", {})
+
             for ser_name, ser_conf in mcp_servers.items():
                 self.servers[ser_name] = {
                     "command": ser_conf["command"],
@@ -60,7 +60,7 @@ class MCPServerManager:
             self.output_queues[ser_name] = queue.Queue()
             self.stop_events[ser_name] = threading.Event()
             
-            # 启动读取线程
+
             def read_loop(proc, output_q, stop_flag):
                 """读取服务器输出的线程"""
                 while not stop_flag.is_set():
@@ -149,7 +149,7 @@ class MCPServerManager:
         }
         
         print(f"[Debug] 发送初始化请求...")
-        resp = self.send_mcp_req(ser_name, init_req)
+        resp = self.send_mcp_req(ser_name, init_req, timeout=10)
         
         if resp and 'result' in resp:
             print(f"[Debug] 初始化成功")
