@@ -1,9 +1,15 @@
 """
 LyNexus API Server
-FastAPI backend for LyNexus WebUI
+FastAPI backend for LyNexus WebUI with ReAct framework
 
 This server provides REST APIs for the WebUI to interact with
-the AI assistant core logic, removing Qt UI dependencies.
+the AI assistant core logic using ReAct (Reasoning + Acting) paradigm.
+
+ReAct Framework Integration:
+- Thought -> Action -> Observation loop
+- Tiered storage for tools (summary/detail)
+- Streaming and non-streaming modes
+- MCP tools integration
 """
 
 import os
@@ -181,19 +187,33 @@ def save_api_key(conversation_id: str, api_key: str):
     with open(confignore_file, 'w', encoding='utf-8') as f:
         f.write(api_key)
 
+# get AI instance for conversation
 def get_ai_instance(conversation_id: str) -> Optional[AI]:
-    """Get or create AI instance for conversation"""
+    """
+    Get or create AI instance for conversation
+
+    ReAct framework instance management:
+    - Returns cached instance if exists
+    - Creates new instance with ReAct config if not exists
+    - Loads API key and conversation settings
+
+    Args:
+        conversation_id: Unique conversation identifier
+
+    Returns:
+        AI instance or None if API key not available
+    """
     if conversation_id in conversation_ais:
         return conversation_ais[conversation_id]
 
-    # Load configuration
+    # load configuration
     config = load_conversation_config(conversation_id)
     api_key = load_api_key(conversation_id)
 
     if not api_key:
         return None
 
-    # Create AI instance
+    # create AI instance with ReAct framework
     try:
         ai_kwargs = {
             'api_key': api_key,
@@ -203,15 +223,13 @@ def get_ai_instance(conversation_id: str) -> Optional[AI]:
             'max_tokens': config.get('max_tokens'),
             'top_p': config.get('top_p', 1.0),
             'stream': config.get('stream', True),
-            'command_start': config.get('command_start', 'YLDEXECUTE:'),
-            'command_separator': config.get('command_separator', '￥|'),
             'max_iterations': config.get('max_iterations', 15),
             'mcp_paths': config.get('mcp_paths', []),
             'system_prompt': config.get('system_prompt', ''),
             'chat_name': conversation_id
         }
 
-        # Remove None values
+        # remove None values
         ai_kwargs = {k: v for k, v in ai_kwargs.items() if v is not None and v != ''}
 
         ai_instance = AI(**ai_kwargs)
@@ -502,12 +520,28 @@ async def get_messages(conversation_id: str):
         logger.error(f"Error loading messages: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# message generator for SSE streaming
 async def message_generator(ai: AI, user_message: str, conversation_id: str):
-    """Generate streaming response"""
+    """
+    Generate streaming response using ReAct framework
+
+    ReAct loop streaming handler:
+    - Loads conversation history with system prompt
+    - Streams AI responses including Thought/Action/Observation
+    - Updates history with ReAct loop iterations
+
+    Args:
+        ai: AI instance with ReAct framework
+        user_message: User input message
+        conversation_id: Unique conversation identifier
+
+    Yields:
+        SSE events with type and data
+    """
     try:
         current_time = datetime.now().isoformat()
 
-        # Create user message
+        # create user message
         user_msg = {
             "id": f"msg-{int(datetime.now().timestamp() * 1000)}",
             "content": user_message,
@@ -518,42 +552,42 @@ async def message_generator(ai: AI, user_message: str, conversation_id: str):
             "isStreaming": False
         }
 
-        # Load conversation history with system prompt
-        # This is CRITICAL: history_manager.load_history() will:
+        # load conversation history with system prompt
+        # CRITICAL: history_manager.load_history() will:
         # 1. Load history from data/{chat_name}/{chat_name}_ai.json
-        # 2. Inject system prompt with tools description + markdown rules + history guidance
-        # Get effective system prompt (includes tools description + markdown rules)
+        # 2. Inject system prompt with ReAct tools description
+        # get effective system prompt (includes tools description)
         system_prompt = ai.get_effective_system_prompt() if ai else None
         conversation_history = history_manager.load_history(conversation_id, system_prompt or "")
 
-        # Add user message to history WITH timestamp
+        # add user message to history WITH timestamp
         conversation_history.append({
             "role": "user",
             "content": user_message,
             "timestamp": current_time
         })
 
-        # Yield user message - EventSourceResponse requires JSON-encoded string for 'data'
+        # yield user message - EventSourceResponse requires JSON-encoded string for 'data'
         yield {'data': json.dumps({'type': 'user_message', 'message': user_msg})}
 
-        # Stream AI response
+        # stream AI response via ReAct loop
         full_response = ""
         message_id = f"msg-{int(datetime.now().timestamp() * 1000) + 1}"
 
-        # Process with streaming - CRITICAL: pass conversation_history
-        # This ensures AI has proper context with system prompt
-        # aiclass.py will handle command detection and execution internally
+        # process with streaming - CRITICAL: pass conversation_history
+        # this ensures AI has proper context with system prompt
+        # aiclass.py will handle ReAct loop internally (Thought -> Action -> Observation)
         for chunk in ai.process_user_input_stream(user_message, conversation_history):
             if chunk:
                 full_response += chunk
-                # Send chunk - EventSourceResponse requires JSON-encoded string for 'data'
+                # send chunk - EventSourceResponse requires JSON-encoded string for 'data'
                 yield {'data': json.dumps({'type': 'chunk', 'content': chunk, 'messageId': message_id})}
 
-        # CRITICAL: Use the updated history from aiclass (includes all commands and results)
+        # CRITICAL: use the updated history from aiclass (includes all ReAct iterations)
         # aiclass.process_user_input_stream updates ai.conv_his internally
         updated_history = ai.conv_his.copy() if hasattr(ai, 'conv_his') and ai.conv_his else conversation_history
 
-        # Create AI message
+        # create AI message
         ai_msg = {
             "id": message_id,
             "content": full_response,
@@ -564,11 +598,10 @@ async def message_generator(ai: AI, user_message: str, conversation_id: str):
             "isStreaming": False
         }
 
-        # Save updated history (includes all commands, results, and final AI response)
-        # The updated_history from aiclass contains:
+        # save updated history (includes all ReAct iterations and final response)
+        # the updated_history from aiclass contains:
         # - User messages
-        # - All command executions (assistant role)
-        # - All command results (user role with command_execution_prompt)
+        # - All Thought/Action/Observation loops (assistant/user roles)
         # - Final AI response
         history_manager.save_history(conversation_id, updated_history)
 
@@ -584,9 +617,24 @@ async def message_generator(ai: AI, user_message: str, conversation_id: str):
         logger.error(f"Error in streaming: {e}")
         yield {'data': json.dumps({'type': 'error', 'error': str(e)})}
 
+# send message with streaming response (SSE)
 @app.post("/api/conversations/{conversation_id}/messages/stream")
 async def stream_message(conversation_id: str, data: SendMessageModel):
-    """Send message with streaming response (SSE)"""
+    """
+    Send message with streaming response using ReAct framework
+
+    ReAct streaming endpoint:
+    - Returns SSE stream with Thought/Action/Observation
+    - Real-time updates for each ReAct iteration
+    - Final answer when loop completes
+
+    Args:
+        conversation_id: Unique conversation identifier
+        data: Message content
+
+    Returns:
+        EventSourceResponse with ReAct loop updates
+    """
     try:
         ai = get_ai_instance(conversation_id)
         if not ai:
@@ -602,9 +650,24 @@ async def stream_message(conversation_id: str, data: SendMessageModel):
         logger.error(f"Error in stream_message: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# send message (non-streaming)
 @app.post("/api/conversations/{conversation_id}/messages")
 async def send_message(conversation_id: str, data: SendMessageModel):
-    """Send message (non-streaming)"""
+    """
+    Send message with non-streaming response using ReAct framework
+
+    ReAct non-streaming endpoint:
+    - Processes complete ReAct loop internally
+    - Returns final answer after all iterations
+    - Suitable for simple queries
+
+    Args:
+        conversation_id: Unique conversation identifier
+        data: Message content
+
+    Returns:
+        Complete AI message with final answer
+    """
     try:
         ai = get_ai_instance(conversation_id)
         if not ai:
@@ -612,12 +675,12 @@ async def send_message(conversation_id: str, data: SendMessageModel):
 
         current_time = datetime.now().isoformat()
 
-        # Load AI history
-        # Get effective system prompt (includes tools description + markdown rules)
+        # load AI history with system prompt
+        # get effective system prompt (includes ReAct tools description)
         system_prompt = ai.get_effective_system_prompt() if ai else None
         conversation_history = history_manager.load_history(conversation_id, system_prompt or "")
 
-        # Add user message to history WITH timestamp
+        # add user message to history WITH timestamp
         user_msg_timestamp = current_time
         conversation_history.append({
             "role": "user",
@@ -625,17 +688,17 @@ async def send_message(conversation_id: str, data: SendMessageModel):
             "timestamp": user_msg_timestamp
         })
 
-        # Get AI response
+        # get AI response via ReAct loop
         response = ai.process_user_input_with_history(data.content, conversation_history)
 
-        # CRITICAL: Use the updated history from aiclass (includes all commands and results)
+        # CRITICAL: use the updated history from aiclass (includes all ReAct iterations)
         # aiclass.process_user_input_with_history updates ai.conv_his internally
         updated_history = ai.conv_his.copy() if hasattr(ai, 'conv_his') and ai.conv_his else conversation_history
 
-        # Save to AI history (includes all commands and results)
+        # save to AI history (includes all ReAct iterations)
         history_manager.save_history(conversation_id, updated_history)
 
-        # Return in frontend format
+        # return in frontend format
         ai_msg = {
             "id": f"msg-{int(datetime.now().timestamp() * 1000) + 1}",
             "content": response,
@@ -653,17 +716,31 @@ async def send_message(conversation_id: str, data: SendMessageModel):
         logger.error(f"Error sending message: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# stop streaming ReAct loop
 @app.post("/api/conversations/{conversation_id}/messages/stop")
 async def stop_streaming(conversation_id: str):
-    """Stop streaming response and kill any running command processes"""
+    """
+    Stop streaming ReAct loop and halt execution
+
+    ReAct stop endpoint:
+    - Sets stop_flag to halt current ReAct iteration
+    - Interrupts streaming response
+    - Kills any running tool executions
+
+    Args:
+        conversation_id: Unique conversation identifier
+
+    Returns:
+        Success status
+    """
     try:
-        # Get AI instance for this conversation
+        # get AI instance for this conversation
         ai = get_ai_instance(conversation_id)
         if ai:
-            # Set stop flag to stop streaming
+            # set stop flag to stop ReAct loop
             ai.set_stop_flag(True)
 
-            # Kill any running subprocess if exists
+            # kill any running subprocess if exists
             if hasattr(ai, 'current_process') and ai.current_process:
                 try:
                     ai.current_process.kill()
@@ -800,12 +877,26 @@ async def validate_api_key(data: ValidateApiKeyModel):
         return {"valid": False, "error": str(e)}
 
 # ============================================================================
-# API Routes: MCP Tools
+# API Routes: MCP Tools (ReAct framework integration)
 # ============================================================================
 
+# get available MCP tools for ReAct framework
 @app.get("/api/mcp/tools", response_model=List[MCPToolModel])
 async def get_mcp_tools(conversation: Optional[str] = None):
-    """Get available MCP tools"""
+    """
+    Get available MCP tools with tiered storage info
+
+    ReAct tools endpoint:
+    - Returns tool summary (tier-1 storage)
+    - Shows server and description for each tool
+    - Used for frontend tools display
+
+    Args:
+        conversation: Conversation ID to get AI instance
+
+    Returns:
+        List of available MCP tools with metadata
+    """
     try:
         if not conversation:
             return []
@@ -833,9 +924,14 @@ async def get_mcp_tools(conversation: Optional[str] = None):
         logger.error(f"Error getting MCP tools: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# add MCP tool to conversation
 @app.post("/api/conversations/{conversation_id}/mcp-tools")
 async def add_mcp_tool(conversation_id: str, filePath: str = Form(...)):
-    """Add MCP tool to conversation (deprecated - use upload_mcp_tools instead)"""
+    """
+    Add MCP tool to conversation (deprecated - use upload_mcp_tools instead)
+
+    Note: This endpoint is kept for backwards compatibility
+    """
     try:
         config = load_conversation_config(conversation_id)
         mcp_paths = config.get("mcp_paths", [])
@@ -850,11 +946,24 @@ async def add_mcp_tool(conversation_id: str, filePath: str = Form(...)):
         logger.error(f"Error adding MCP tool: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# upload MCP tool files
 @app.post("/api/conversations/{conversation_id}/mcp-tools/upload")
 async def upload_mcp_tools(conversation_id: str, files: List[UploadFile] = File(...)):
     """
-    Upload MCP tool files to the conversation's tools directory (data/{conversation_id}/tools/)
-    Automatically saves files and returns the relative paths
+    Upload MCP tool files for ReAct framework
+
+    MCP tools upload endpoint:
+    - Saves .py/.json files to data/{conversation_id}/tools/
+    - Updates conversation config with new tool paths
+    - Triggers AI instance reload with new tools
+    - Tools are registered in tiered storage (summary/detail)
+
+    Args:
+        conversation_id: Unique conversation identifier
+        files: List of MCP tool files (.py or .json)
+
+    Returns:
+        List of uploaded file paths relative to conversation directory
     """
     try:
         # Get or create conversation directory
